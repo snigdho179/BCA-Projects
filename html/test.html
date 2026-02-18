@@ -1,0 +1,2921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Entangled: Infinite Chain</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
+        body { 
+            margin: 0; padding: 0; 
+            background: #0f0c29; color: #fff; 
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden; text-align: center;
+            height: 100dvh; width: 100vw; /* 100dvh Fix for Mobile */
+            display: flex; flex-direction: column;
+        }
+
+        /* Game Container for Centering */
+        #game-container {
+             display: flex; justify-content: center; align-items: center; 
+             height: 100dvh; width: 100vw; 
+             background: #0f0c29; overflow: hidden;
+             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 10;
+        }
+        
+        .screen {
+            background: rgba(15, 12, 41, 0.95);
+            padding: 20px; border-radius: 12px;
+            pointer-events: auto;
+            border: 2px solid #e94560;
+            display: none;
+            max-width: 400px; width: 90%;
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+        }
+        
+        .visible { display: block !important; }
+
+        h1 { margin: 0 0 10px 0; color: #e94560; text-shadow: 2px 2px #000; font-size: 24px; }
+        p { font-size: 14px; margin-bottom: 15px; color: #ccc; }
+        
+        input { 
+            background: #333; border: 1px solid #555; color: white; 
+            padding: 12px; border-radius: 5px; width: 100%; margin-bottom: 10px;
+            font-family: inherit; font-size: 16px;
+        }
+
+        button {
+            background: #e94560; color: white; border: none;
+            padding: 12px 24px; border-radius: 5px; cursor: pointer;
+            font-size: 16px; font-weight: bold; width: 100%;
+            margin-top: 5px; transition: 0.2s;
+            text-transform: uppercase;
+        }
+        button:active { transform: scale(0.95); }
+        button.secondary { background: #16213e; border: 1px solid #e94560; margin-top: 10px; }
+
+        /* HUD */
+        #hud {
+            position: absolute; top: 10px; left: 10px; right: 10px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-weight: bold; text-shadow: 1px 1px 2px black;
+            pointer-events: auto;
+            z-index: 5;
+            /* SafeArea padding compensation handled by container? No HUD is absolute to body usually. 
+               Let's make HUD use env safe area too. */
+            top: calc(10px + env(safe-area-inset-top));
+            left: calc(10px + env(safe-area-inset-left));
+            right: calc(10px + env(safe-area-inset-right));
+        }
+        
+        .hud-btn {
+            background: rgba(0,0,0,0.5); border: 1px solid #fff;
+            width: 40px; height: 40px; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 20px; cursor: pointer; padding: 0; margin-left: 10px;
+        }
+
+        #room-info { 
+            background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px;
+            font-size: 12px; display: flex; gap: 10px; align-items: center;
+        }
+
+        /* Canvas inside container */
+        canvas { 
+            display: block; 
+            image-rendering: pixelated; 
+            /* Let layout be handled by js/flex for sizing, but absolute center just in case */
+        }
+
+        /* Controls */
+        .controls-area {
+            position: absolute; bottom: 20px; left: 0; width: 100%;
+            height: 150px; display: flex; justify-content: space-between; align-items: flex-end;
+            padding: 0 40px; pointer-events: none; z-index: 20;
+        }
+
+        .joystick-zone {
+            width: 120px; height: 120px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            position: relative;
+            pointer-events: auto;
+        }
+
+        .knob {
+            width: 50px; height: 50px;
+            background: rgba(233, 69, 96, 0.5);
+            border-radius: 50%;
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(233,69,96,0.5);
+        }
+        
+        #jump-btn {
+            width: 80px; height: 80px; 
+            background: rgba(233, 69, 96, 0.8); 
+            border-radius: 50%; 
+            position: relative; /* Fixed: Part of Flex layout */
+            display: flex; justify-content: center; align-items: center;
+            font-weight: bold; font-size: 14px;
+            pointer-events: auto;
+            box-shadow: 0 0 15px rgba(233, 69, 96, 0.5);
+        }
+
+        .player-tag { pointer-events: none; }
+
+        /* Orientation Warning */
+        #orientation-warning {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0f0c29; z-index: 9999;
+            color: #e94560; justify-content: center; align-items: center; text-align: center;
+            flex-direction: column; padding: 20px;
+        }
+        #orientation-warning h1 { font-size: 40px; }
+        
+        @media screen and (orientation: portrait) {
+            /* Only show warning if we are IN GAME, or maybe always? 
+               The prompt implies fallback if lock fails. 
+               Usually simpler to just show it always on portrait if the game expects landscape */
+            #orientation-warning { display: flex; }
+            /* But we don't want it covering the menu if they are responding to texts etc? 
+               Let's make it cover everything provided simple "rotate" instruction */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="orientation-warning">
+        <h1>↻</h1>
+        <p>Please rotate your device to play.</p>
+    </div>
+
+    <!-- Wrapped Game Container for Centering -->
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <div id="hud">
+        <div id="room-info">
+            <span>ID: <span id="disp-room-id">...</span></span>
+            <span>👥 <span id="disp-players">1</span>/4</span>
+        </div>
+        <div style="display:flex; justify-content: flex-end;">
+             <div class="hud-btn" onclick="VoiceSys.toggle()" id="voice-btn" style="margin-right: 15px;">🎤</div>
+             <div class="hud-btn" onclick="quitGame()" id="quit-btn" style="background: #ff4757;">✕</div>
+        </div>
+    </div>
+
+    <div id="ui-layer">
+        <!-- Fade Overlay -->
+        <div id="fade-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:black; pointer-events:none; opacity:0; transition: opacity 2s; z-index:100;"></div>
+
+        <!-- Main Menu -->
+        <div id="menu-screen" class="screen visible">
+            <h1>ENTANGLED</h1>
+            <p>Infinite Chain Co-op</p>
+            
+            <input type="text" id="room-name" placeholder="Enter Room Name (e.g. 'coolroom')">
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="hostGame()">CREATE ROOM</button>
+                <button class="secondary" style="margin-top: 0;" onclick="joinGame()">JOIN ROOM</button>
+            </div>
+            <!-- Added Fullscreen Helper for Guest/Early -->
+            <button class="secondary" onclick="toggleFullscreen()" style="font-size: 12px; padding: 8px;">[ ] Fullscreen</button>
+            
+            <p id="menu-error" style="color: #ff4757; margin-top: 10px;"></p>
+        </div>
+
+        <div id="waiting-room" class="screen">
+            <h1>WAITING ROOM</h1>
+            <p>Room: <strong id="lobby-id" style="color:#2ed573;">...</strong></p>
+            
+            <div id="connection-status" style="margin-bottom: 20px; color: #ccc;">
+                Status: <span style="color:yellow">Initializing...</span>
+            </div>
+
+            <div id="player-list" style="text-align:left; background:rgba(0,0,0,0.3); padding:10px; border-radius:5px; margin-bottom:20px;">
+            </div>
+            
+            <div id="host-controls">
+                <button onclick="triggerGameStart()">START JOURNEY</button>
+            </div>
+            <div id="guest-controls" style="display:none;">
+                <p style="color: #e94560; animation: pulse 1s infinite;">Waiting for Host to start...</p>
+            </div>
+        </div>
+        
+        <div id="overlay-screen" class="screen">
+            <h1 id="overlay-title">GAME OVER</h1>
+            <p id="overlay-msg"></p>
+            <div id="overlay-btn-container">
+                 <button onclick="resetGame()">RESTART</button>
+            </div>
+        </div>
+
+        <div id="win-screen" class="screen" style="border-color: #ffd700; box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);">
+            <h1 style="color: #ffd700;">TOGETHER FOREVER!</h1>
+            <p style="color: #dfe6e9;">Level Cleared</p>
+            <div style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 8px; margin: 15px 0; text-align: left;">
+                 <p style="margin: 5px 0; display:flex; justify-content:space-between;">
+                     <span>⏱️ Time:</span> 
+                     <span id="win-time" style="color:#fff; font-weight:bold;">0s</span>
+                 </p>
+                 <p style="margin: 5px 0; display:flex; justify-content:space-between;">
+                     <span>💀 Deaths:</span> 
+                     <span id="win-deaths" style="color:#ff4757; font-weight:bold;">0</span>
+                 </p>
+            </div>
+            <div id="win-host-controls">
+                 <button onclick="nextLevel()" style="background: #ffd700; color: #000;">NEXT LEVEL ➔</button>
+            </div>
+            <div id="win-guest-wait" style="display:none;">
+                <p>Waiting for Host...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Canvas moved inside game-container -->
+
+    <div class="controls-area" id="controls" style="display:none;">
+        <div id="jump-btn">JUMP</div>
+        <div id="move-stick-zone" class="joystick-zone">
+            <div id="move-stick" class="knob"></div>
+        </div>
+    </div>
+
+<script>
+
+const CONFIG = {
+    GRAVITY: 0.8,
+    FRICTION: 0.85,
+    SPEED: 1.2,
+    MAX_SPEED: 4.5,
+    MAX_AIR_SPEED: 9.6,
+    JUMP: 11,
+    ROPE_LEN: 120,
+    ROPE_STIFFNESS: 4,
+
+    // Physics Tweaks
+    AIR_ACCEL: 0.4,
+    COYOTE_TIME: 5,
+    ANCHOR_FRICTION: 0.98,
+    PULL_FORCE: 2.5,
+    
+    // Level Gen Limits
+    MAX_GAP: 150,
+    MAX_HEIGHT_DIFF: 80,
+    SAFETY_BUFFER: 40
+};
+
+// --- AUDIO ---
+const AudioSys = {
+    ctx: new (window.AudioContext || window.webkitAudioContext)(),
+    muted: false,
+    masterVol: 0.3, 
+    bgmInterval: null,
+    
+    init() {
+        const resume = () => { if(this.ctx.state==='suspended') { this.ctx.resume(); } };
+        ['click','keydown','touchstart'].forEach(e => window.addEventListener(e, resume));
+    },
+
+    play(type, fromNet = false) {
+        if (this.muted || !this.ctx) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+        
+        // Broadcast SFX if Host
+        if (isHost && !fromNet) broadcast({type: 'SFX', name: type});
+
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        const vol = this.masterVol;
+
+        switch(type) {
+            case 'jump': // Rising 'Boing'
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.linearRampToValueAtTime(300, t + 0.1);
+                gain.gain.setValueAtTime(vol * 0.4, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+                osc.start(t); osc.stop(t + 0.1);
+                break;
+            case 'land': // Low 'Thud'
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(100, t);
+                osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
+                gain.gain.setValueAtTime(vol * 0.6, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+                osc.start(t); osc.stop(t + 0.15);
+                break;
+            case 'collect': // High 'Ting'
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, t); // High ting
+                gain.gain.setValueAtTime(vol * 0.5, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+                osc.start(t); osc.stop(t + 0.2);
+                break;
+            case 'die': // Descending 'Buzz'
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.linearRampToValueAtTime(50, t + 0.4);
+                gain.gain.setValueAtTime(vol * 0.5, t);
+                gain.gain.linearRampToValueAtTime(0, t + 0.4);
+                osc.start(t); osc.stop(t + 0.4);
+                break;
+            case 'win': // Arpeggio
+                [0, 0.1, 0.2].forEach((d, i) => {
+                    let o = this.ctx.createOscillator();
+                    let g = this.ctx.createGain();
+                    o.connect(g); g.connect(this.ctx.destination);
+                    o.type = 'square';
+                    o.frequency.value = [523.25, 659.25, 783.99][i];
+                    g.gain.setValueAtTime(vol * 0.3, t+d);
+                    g.gain.exponentialRampToValueAtTime(0.01, t+d+0.15);
+                    o.start(t+d); o.stop(t+d+0.2);
+                });
+                break;
+        }
+    },
+    
+    startBGM() {
+        if(this.muted || !this.ctx) return;
+        this.stopBGM();
+        if(this.ctx.state === 'suspended') this.ctx.resume();
+        
+        // Lo-fi Synth Loop
+        let beat = 0;
+        const notes = [110, 110, 130.8, 146.8]; // A A C D
+        this.bgmInterval = setInterval(() => {
+            if(!gameRunning || this.muted) return;
+            const t = this.ctx.currentTime;
+            
+            // Bass
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.type = 'triangle';
+            osc.frequency.value = notes[beat % 4];
+            gain.gain.setValueAtTime(0, t);
+            gain.gain.linearRampToValueAtTime(this.masterVol * 0.15, t + 0.05);
+            gain.gain.linearRampToValueAtTime(0, t + 0.4);
+            osc.start(t); osc.stop(t + 0.4);
+            
+            // HiHat (Noise)
+            if(beat % 2 !== 0) {
+                 const buf = this.ctx.createBuffer(1, this.ctx.sampleRate*0.05, this.ctx.sampleRate);
+                 const d = buf.getChannelData(0);
+                 for(let i=0; i<d.length; i++) d[i] = Math.random()*2-1;
+                 const src = this.ctx.createBufferSource();
+                 src.buffer = buf;
+                 const hg = this.ctx.createGain();
+                 src.connect(hg); hg.connect(this.ctx.destination);
+                 hg.gain.setValueAtTime(this.masterVol * 0.05, t);
+                 hg.gain.exponentialRampToValueAtTime(0.001, t+0.05);
+                 src.start(t);
+            }
+            beat++;
+        }, 300); 
+    },
+    
+    stopBGM() {
+        if(this.bgmInterval) { clearInterval(this.bgmInterval); this.bgmInterval = null; }
+    },
+    
+    fadeOut() {
+        let vol = this.masterVol;
+        let fadeInt = setInterval(() => {
+            vol -= 0.05;
+            if(vol <= 0) {
+                clearInterval(fadeInt);
+                this.stopBGM();
+                this.masterVol = 0.3; // Reset for next time
+            } else {
+               this.stopBGM();
+            }
+        }, 200);
+    },
+
+    // Backwards compat
+    jump() { this.play('jump'); },
+    die() { this.play('die'); },
+    win() { this.play('win'); }
+};
+AudioSys.init();
+
+function toggleMute() {
+    AudioSys.muted = !AudioSys.muted;
+    document.getElementById('mute-btn').innerText = AudioSys.muted ? '🔇' : '🔊';
+}
+
+// --- STATE ---
+const ROLES = ['#ff4757', '#2ed573', '#1e90ff', '#ffa502']; // Red, Green, Blue, Orange
+const STATE = { MENU:0, LOBBY:1, PLAYING:2, GAMEOVER:3 };
+let currentState = STATE.MENU;
+let gameRunning = false;
+let physicsEnabled = false;
+let myId = null;
+let hostId = null;
+let isHost = false;
+let peer = null;
+let connections = [];
+let myIdx = 0;
+let level = 1;
+let levelStartTime = Date.now();
+let levelDeaths = 0;
+let camX = 0;
+let camY = 0;
+let scale = 1;
+let players = [];
+let levelData = { platforms: [], spikes: [], hearts: [], goal: {x:0,y:0}, urchins: [], checkpoint: null };
+let currentSpawnPoint = { x: 100, y: 360 };
+let deathWallX = -500;
+let particles = [];
+let shake = 0;
+
+function spawnParticle(x, y, color, type = 'dust', fromNet = false) {
+    if(isHost && !fromNet) {
+        broadcast({type: 'FX', x, y, color, pType: type});
+    }
+
+    for(let i=0; i< (type==='sparkle'?10:5); i++) {
+        let ang = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 2 + 1;
+        particles.push({
+            x: x, y: y,
+            vx: Math.cos(ang) * speed,
+            vy: Math.sin(ang) * speed,
+            life: 1.0,
+            color: color,
+            type: type
+        });
+    }
+}
+
+function updateParticles() {
+    for(let i=particles.length-1; i>=0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.05;
+        if(p.type === 'dust') p.vy -= 0.1; // rise
+        if(p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+// Rope Chains (Host Only Physics, Sync to Client)
+let chains = []; // Array of arrays: [ [{x,y,px,py},...], ... ] for each link (0-1, 1-2, 2-3)
+
+// Inputs
+let localInput = { x: 0, y: 0, jump: false };
+let inputBuffer = [ {}, {}, {}, {} ]; // Host stores all inputs here
+
+// --- NETWORKING ---
+
+function initPeer(customId, callback) {
+    if(peer) {
+        peer.destroy();
+        peer = null;
+    }
+    
+    // Use customId if provided, else null (random)
+    peer = new Peer(customId, {
+        debug: 2 
+    });
+    
+    peer.on('open', (id) => {
+        myId = id;
+        console.log("My Peer ID:", id);
+        if(callback) callback(id);
+    });
+    
+    peer.on('error', (err) => {
+        console.error("PeerJS Error:", err);
+        if(err.type === 'unavailable-id') {
+            alert('Room name already in use, please try another.');
+            document.getElementById('menu-error').innerText = "Room Taken";
+            // Allow retry?
+            peer = null;
+        } else {
+            alert("Network Error: " + err.type);
+        }
+    });
+    
+    // Incoming connection
+    peer.on('connection', (conn) => {
+        conn.on('open', () => {
+             // ...
+             if (isHost) handleClientJoin(conn);
+        });
+    });
+    
+    // Incoming Voice Call
+    peer.on('call', (call) => {
+        console.log("Receiving call from", call.peer);
+        const autoAnswer = () => {
+             if(VoiceSys.stream) {
+                call.answer(VoiceSys.stream);
+            } else {
+                call.answer(); 
+            }
+            VoiceSys.setupCall(call);
+        };
+        autoAnswer();
+    });
+}
+
+const VoiceSys = {
+    stream: null,
+    calls: {}, 
+    toggle() {
+        if(!this.stream) {
+            this.init();
+        } else {
+            const track = this.stream.getAudioTracks()[0];
+            track.enabled = !track.enabled;
+            this.updateBtn();
+        }
+    },
+    updateBtn() {
+        const btn = document.getElementById('voice-btn');
+        if (!this.stream) {
+             btn.innerText = '🎤';
+             btn.style.background = 'rgba(0,0,0,0.5)';
+             return;
+        }
+        
+        const track = this.stream.getAudioTracks()[0];
+        if(!track.enabled) {
+             btn.innerText = '🔇';
+             btn.style.background = '#ff4757';
+        } else {
+             btn.innerText = '🎙️';
+             btn.style.background = '#2ed573';
+        }
+    },
+    init() {
+        if(this.stream) return;
+        navigator.mediaDevices.getUserMedia({audio: true}).then(s => {
+            this.stream = s;
+            this.updateBtn();
+            // Update existing calls with my stream? 
+            // PeerJS replaceTrack is complex. Simpler to recall or just let next sync handle?
+            // Existing 'receive-only' calls might need re-negotiation.
+            // For this simple script, we rely on subsequent connection logic.
+            this.sync();
+        }).catch(e => {
+            console.error(e);
+            alert("Mic Access Denied. Check browser settings.");
+        });
+    },
+    sync() {
+        // Connect to anyone we know who we aren't calling/connected to
+        if(!this.stream) return;
+        players.forEach(p => {
+             if(p.connected && p.peerId && p.peerId !== myId && !this.calls[p.peerId]) {
+                 console.log("Calling Peer:", p.peerId);
+                 const call = peer.call(p.peerId, this.stream);
+                 this.setupCall(call, p.peerId);
+             }
+        });
+    },
+    setupCall(call, pId) {
+        const id = pId || call.peer;
+        this.calls[id] = call;
+        
+        call.on('stream', remoteStream => {
+            if(document.getElementById('audio-'+id)) return;
+            console.log("Voice connected:", id);
+            const audio = document.createElement('audio');
+            audio.id = 'audio-'+id;
+            audio.srcObject = remoteStream;
+            audio.autoplay = true;
+            document.body.appendChild(audio);
+        });
+        
+        const cleanup = () => {
+            delete this.calls[id];
+            const el = document.getElementById('audio-'+id);
+            if(el) el.remove();
+        };
+        
+        call.on('close', cleanup);
+        call.on('error', cleanup);
+    }
+};
+
+function hostGame() {
+    const name = document.getElementById('room-name').value.trim();
+    if(!name) { 
+        document.getElementById('menu-error').innerText = "Room name required!";
+        return; 
+    }
+    document.getElementById('menu-error').innerText = "Creating...";
+
+    initPeer(name, (id) => {
+        isHost = true;
+        myIdx = 0;
+        hostId = id;
+        players = [{ connected: true, x: 100, y: 300, vx: 0, vy: 0, color: ROLES[0], dead: false, peerId: id }];
+        inputBuffer[0] = { x: 0, jump: false };
+        
+        document.getElementById('lobby-id').innerText = id;
+        document.getElementById('disp-room-id').innerText = id.substring(0,10);
+        uiSet(STATE.LOBBY);
+    });
+}
+
+function joinGame() {
+    const target = document.getElementById('room-name').value.trim();
+    if(!target) { 
+        document.getElementById('menu-error').innerText = "Enter room name to join!";
+        return; 
+    }
+    
+    document.getElementById('menu-error').innerText = "Connecting...";
+    
+    // Init Guest with Random ID (null)
+    initPeer(null, (id) => {
+        isHost = false;
+        
+        // Wait for Open passed via callback
+        console.log("Connecting to:", target);
+        
+        const conn = peer.connect(target);
+        conn.on('open', () => {
+             console.log("Connected to Host");
+             connections.push(conn);
+             uiSet(STATE.LOBBY); 
+        });
+        
+        conn.on('data', (d) => {
+             // OLD Init logic removed in favor of Waiting Room flow
+             
+             if(d.type === 'WELCOME') {
+                 myIdx = d.idx;
+                 levelData = d.level;
+                 if(d.players) players = d.players;
+                 document.getElementById('disp-room-id').innerText = target.substring(0,5);
+                 document.getElementById('lobby-id').innerText = target;
+                 console.log("Joined as Player", myIdx);
+                 VoiceSys.sync();
+                 uiSet(STATE.LOBBY); // Go to waiting room
+             }
+             
+             if (d.type === 'PLAYER_JOINED') {
+                 players = d.players;
+                 updatePlayerListUI();
+             }
+             
+             if(d.type === 'GAME_BEGIN') {
+                 // Trigger Fade
+                 const fade = document.getElementById('fade-overlay');
+                 fade.style.opacity = 1;
+                 // Client waits for START message to actually begin
+                 setTimeout(() => { fade.style.opacity = 0; }, 2000);
+             }
+
+             if(d.type === 'START') {
+                 levelData = d.level;
+                 level = d.lvNum;
+                 players = d.players;
+                 gameRunning = true;
+                 uiSet(STATE.PLAYING);
+                 resize();
+                 gameLoop();
+             }
+             
+             if(d.type === 'UI_CHANGE') {
+                 gameRunning = false;
+                 if (d.mode === 'WIN') {
+                     showOverlay("LEVEL COMPLETE", "Next Level starting...", false);
+                     AudioSys.win();
+                 }
+                 if (d.mode === 'LOSS') {
+                     showOverlay("GAME OVER", "The chain was broken.", false);
+                     AudioSys.die();
+                 }
+                 if (d.mode === 'MSG_CLEAR') {
+                     document.getElementById('overlay-screen').classList.remove('visible');
+                 }
+             }
+
+             if(d.type === 'RESTART_CONFIRMED') {
+                 document.getElementById('overlay-screen').classList.remove('visible');
+             }
+
+             if(d.type === 'AUTO_RESPAWN') {
+                 // IMMEDIATE STATE SNAP (Guest Logic)
+                 gameRunning = true; 
+                 
+                 // Snap Coordinates & Purge Velocity
+                 players = d.players; 
+                 // Force local purge just in case
+                 players.forEach(p => { p.vx = 0; p.vy = 0; p.lastVx=0; p.lastVy=0; p.expression='IDLE'; });
+                 
+                 chains = d.chains;
+                 deathWallX = d.dw;
+                 camX = d.x; 
+                 camY = d.y;
+                 
+                 // UI Clean
+                 document.getElementById('overlay-screen').classList.remove('visible');
+
+                 // Handshake Reply
+                 if(connections[0] && connections[0].open) {
+                     connections[0].send({ type: 'RESET_READY' });
+                 }
+             }
+
+             if(d.type === 'RESET_START') {
+                 // Stop Physics locally
+                 gameRunning = true; 
+                 // Note: gameRunning remains 'true' so we can render, but updateClient won't predict excessively if we snap immediately
+                 
+                 // Snap Coordinates
+                 players = d.players;
+                 chains = d.chains;
+                 deathWallX = d.dw;
+                 camX = d.x; 
+                 camY = d.y;
+                 
+                 // Purge Velocity (Already zeroed in d.players, but enforce local safety)
+                 players.forEach(p => { p.vx = 0; p.vy = 0; });
+                 
+                 // Reset Overlay
+                 document.getElementById('overlay-screen').classList.remove('visible');
+                 
+                 // Send Ready
+                 connections[0].send({ type: 'RESET_READY' });
+             }
+
+             if(d.type === 'FORCE_RESPAWN') { // Legacy or fallback catch?
+                 players = d.players; chains = d.chains; deathWallX = d.dw; camX = d.x; camY = d.y;
+                 document.getElementById('overlay-screen').classList.remove('visible');
+             }
+
+             if(d.type === 'GAME_WON') {
+                 gameRunning = false;
+                 AudioSys.stopBGM();
+                 AudioSys.play('win');
+                 showWinScreen(d.stats);
+             }
+
+             if(d.type === 'GAME_OVER_SCREEN') {
+                 gameRunning = false;
+                 AudioSys.play('die');
+                 showGameOverScreen();
+             }
+
+             if(d.type === 'UPDATE') {
+                 // Sync Players with Interpolation Targets
+                 while(players.length < d.players.length) players.push({});
+                 
+                 d.players.forEach((srvP, i) => {
+                     let p = players[i];
+                     if(p.x === undefined) { 
+                         // Fresh init
+                         Object.assign(p, srvP);
+                         p.targetX = srvP.x; p.targetY = srvP.y;
+                         p.lastUpdate = Date.now();
+                     } else {
+                         // Update Targets
+                         p.targetX = srvP.x;
+                         p.targetY = srvP.y;
+                         p.vx = srvP.vx;
+                         p.vy = srvP.vy;
+                         p.lastUpdate = Date.now();
+                         // Sync Status
+                         p.connected = srvP.connected;
+                         p.dead = srvP.dead;
+                         p.color = srvP.color;
+                         p.peerId = srvP.peerId;
+                     }
+                 });
+
+                 chains = d.chains || [];
+                 levelData = d.level; // Sync level if changed
+                 level = d.lvNum;
+                 deathWallX = d.dw || -500;
+                 document.getElementById('disp-players').innerText = players.filter(p=>p.connected).length;
+                 VoiceSys.sync();
+             }
+             if(d.type === 'FX') {
+                 spawnParticle(d.x, d.y, d.color, d.pType, true);
+                 // If shake logic added to payload:
+                 if(d.shake) shake = d.shake; 
+             }
+             if(d.type === 'SFX') {
+                 AudioSys.play(d.name, true);
+             }
+             if(d.type === 'EVENT') {
+                 if(d.name === 'START') startGameClient();
+                 if(d.name === 'WIN') AudioSys.win();
+                 if(d.name === 'DIE') AudioSys.die();
+             }
+             
+             if(d.type === 'SESSION_TERMINATED') {
+                 cleanupAndExit("Partner has left the game");
+             }
+        });
+        
+        conn.on('close', () => {
+            alert("Host disconnected");
+            location.reload();
+        });
+        
+        conn.on('error', (err) => {
+            document.getElementById('menu-error').innerText = "Connection Failed";
+        });
+    });
+}
+
+// Host Logic
+let waitingForReset = false;
+let resetReadyCount = 0;
+
+function handleClientJoin(conn) {
+    if (players.length >= 4) {
+        conn.send({type: 'ERROR', msg: 'Room Full'});
+        setTimeout(()=>conn.close(), 500);
+        return;
+    }
+    
+    const newIdx = players.length;
+    console.log("Client joined, assigning index", newIdx);
+    
+    // Add player
+    players.push({ 
+        connected: true, 
+        x: 100 + newIdx*30, 
+        y: 300, 
+        vx: 0, vy: 0, 
+        color: ROLES[newIdx] || '#fff', 
+        dead: false,
+        peerId: conn.peer 
+    });
+    
+    inputBuffer[newIdx] = { x: 0, jump: false };
+    
+    // Store connection with index metadata
+    conn.playerIndex = newIdx;
+    connections.push(conn);
+
+    // HANDSHAKE: Immediate State Push to fix Blank Screen
+    if (conn.open) {
+        conn.send({ 
+            type: 'init', 
+            level: levelData, 
+            players: players,
+            lvNum: level
+        });
+    } else {
+        conn.on('open', () => {
+             conn.send({ 
+                type: 'init', 
+                level: levelData, 
+                players: players,
+                lvNum: level
+            });
+        });
+    }
+    
+    // Listen for client inputs
+    conn.on('data', (d) => {
+        if(d.type === 'INPUT') {
+            inputBuffer[newIdx] = d.input;
+        }
+        if(d.type === 'PARTNER_LEFT') {
+            broadcast({ type: 'SESSION_TERMINATED' });
+            cleanupAndExit("Partner has left the game");
+        }
+        if(d.type === 'RESET_READY') {
+            resetReadyCount++;
+            checkResetComplete();
+        }
+    });
+    
+    conn.on('close', () => {
+        if(players[newIdx]) players[newIdx].connected = false;
+        // Close voice call if exists? Handled by VoiceSys cleanup
+        
+        // If in Waiting Room, revert UI
+        if (currentState === STATE.LOBBY) {
+            updatePlayerListUI();
+        }
+    });
+
+    // Send Welcome (Includes current players)
+    conn.send({ 
+        type: 'WELCOME', 
+        idx: newIdx, 
+        level: levelData,
+        state: currentState,
+        lvNum: level,
+        players: players 
+    });
+    
+    // Handshake: Tell everyone a new player joined
+    broadcast({ type: 'PLAYER_JOINED', players: players }); 
+    
+    updatePlayerListUI();
+    document.getElementById('disp-players').innerText = players.length;
+    
+    // Host sync voice with new player
+    VoiceSys.sync();
+}
+
+
+function broadcast(msg) {
+    connections.forEach(c => {
+        if(c.open) c.send(msg);
+    });
+}
+
+// --- GAME LOGIC ---
+
+function generateLevel(lv) {
+    // Retry Loop for 100% Solvability
+    let bestAttempt = null;
+    let valid = false;
+    let attempts = 0;
+
+    while (!valid && attempts < 10) {
+        bestAttempt = attemptGenerateLevel(lv);
+        valid = validateLevelPath(bestAttempt);
+        attempts++;
+        if (!valid) console.log("Level gen retry:", attempts);
+    }
+    return bestAttempt || attemptGenerateLevel(lv);
+}
+
+function attemptGenerateLevel(lv) {
+    const platforms = [];
+    const spikes = [];
+    const hearts = [];
+    const urchins = [];
+    const checkpoints = []; // Now supports Array
+    
+    // Reset World Cursor
+    let cx = -100;
+    let cy = 400; // Start Height
+    
+    // --- GUARANTEED SAFE START ---
+    platforms.push({x: -100, y: 400, w: 200, h: 50, type: 'normal', baseX: -100, baseY: 400});
+    cx += 200;
+
+    // --- PROGRESSIVE LEVEL PARTS ---
+    // Part 1: "The Leap" (0-450) - Equalized Gaps (150px)
+    // Part 2: "The Sting" (450-900) - Static Spikes
+    // Part 3: "The Prowler" (900-1350) - Ice Blocks
+    // Part 4: "The Vanishing" (1350-1800) - Crumble
+    // Part 5: "The High Jump" (1800-2250) - Jumpy Blocks
+    // Part 6: "The Slide" (2250-3100) - Urchins, NO SPIKES
+    // Part 7: "Final Goal" (3100-3200) - Safe Path
+
+    const parts = [
+        { end: 450,  id: 1 },
+        { end: 900,  id: 2 },
+        { end: 1350, id: 3 },
+        { end: 1800, id: 4 },
+        { end: 2250, id: 5 },
+        { end: 3100, id: 6 },
+        { end: 3300, id: 7 } // Buffer for end
+    ];
+    
+    let partIdx = 0;
+
+    // Loop through parts
+    while (partIdx < parts.length) {
+        let part = parts[partIdx];
+        let pId = part.id;
+        
+        // Fill Current Part until Cursor reaches Boundary
+        while (cx < part.end) {
+            
+            // Checkpoint Logic (End of Part 1-6)
+            // If we are close to boundary (within ~150px), Place Checkpoint Platform
+            if (pId < 7 && part.end - cx < 180) {
+                 // Force Checkpoint Location
+                 let ckptX = part.end;
+                 let pW = 100;
+                 let pX = ckptX; // Platform specifically at boundary transition
+                 
+                 // Normalize Y for checkpoint (Make it accessible)
+                 if (Math.abs(cy - 400) > 100) cy = 400 + (cy-400)*0.5;
+                 cy = Math.max(250, Math.min(500, cy));
+                 
+                 // Add Gap before Checkpoint? Safe jump.
+                 let finalGap = pX - cx;
+                 if (finalGap < 50) { pX += 50; ckptX += 50; } // Push out if too close
+                 
+                 platforms.push({ x: pX, y: cy, w: pW, h: 40, type: 'normal', moving: false, baseX: pX, baseY: cy });
+                 
+                 checkpoints.push({ x: pX + pW/2, y: cy - 40, active: false });
+                 
+                 cx = pX + pW;
+                 break; // Part Done
+            }
+            
+            // --- Obstacle Generation ---
+            // 1. GAP
+            let gap = 50 + Math.random() * 100;
+            if (pId === 1) gap = 150; // "The Leap" strict 150px
+            
+            // 2. HEIGHT
+            let dy = (Math.random() - 0.5) * 100;
+            if (pId === 1) dy *= 0.5; // Easier leaps
+            if (pId === 5) dy = (Math.random() - 0.5) * 250; // High Jump Extreme
+            
+            let nextY = cy + dy;
+            // Clamps
+            if (nextY > 550) nextY = 550;
+            if (nextY < 200) nextY = 200;
+            if (cy - nextY > CONFIG.MAX_HEIGHT_DIFF) nextY = cy - CONFIG.MAX_HEIGHT_DIFF; // Max Jump Up
+            
+            cy = nextY;
+            let pX = cx + gap;
+            
+            // 3. PLATFORM TYPE
+            let w = 100 + Math.random() * 150;
+            if (pId === 1) w = 150; // Equalized? Or just gap equalized? Let's keep part 1 predictable.
+            
+            let type = 'normal';
+            // Introduction logic
+            if (pId >= 3 && Math.random() < 0.45) type = 'ice';
+            if (pId >= 4 && Math.random() < 0.40) type = 'crumble';
+            if (pId >= 5 && Math.random() < 0.35) type = 'bounce';
+            
+            if (pId === 7) type = 'normal'; // Safe Goal
+
+            let pIdx = platforms.length;
+            platforms.push({
+                x: pX, y: cy, w: w, h: 40,
+                type: type, moving: false, 
+                baseX: pX, baseY: cy,
+                dx: 0, dy: 0,
+                crumbling: false, crumbleTimer: 0,
+                originalW: w, originalH: 40
+            });
+            
+            // 4. HAZARDS
+            // Spikes (Part 2+, NOT Part 6 "Slide", NOT Part 7)
+            if (pId >= 2 && pId !== 6 && pId !== 7 && type === 'normal') {
+                // "Static Spikes in Center"
+                if (Math.random() < 0.5) {
+                    let sW = 30;
+                    spikes.push({ x: pX + w/2 - sW/2, y: cy - 20, w: sW, h: 20, parent: -1 });
+                }
+            }
+            
+            // Red Urchins (Part 6 Only)
+            if (pId === 6 && type === 'normal' && w > 150) {
+                 if (Math.random() < 0.7) {
+                     urchins.push({
+                        parent: pIdx,
+                        relX: w/2, relY: -15,
+                        w: 30, h: 30,
+                        range: w/2 - 20,
+                        speed: 3 + Math.random(), // Fast
+                        dir: 1,
+                        x: pX + w/2, y: cy - 15,
+                        rangeX: 0
+                     });
+                 }
+            }
+            
+            cx = pX + w;
+        }
+        partIdx++;
+    }
+    
+    // Final Goal (Golden Heart)
+    const goalX = 3200;
+    // Bridge if needed
+    if (cx < goalX - 100) {
+        platforms.push({x: goalX - 100, y: cy, w: 100, h: 40, type: 'normal'});
+    }
+    platforms.push({x: goalX, y: cy, w: 200, h: 50, type: 'normal'});
+    const goal = {x: goalX + 100, y: cy - 40, r: 25};
+    
+    return { platforms, spikes, hearts, goal, urchins, checkpoints: checkpoints, checkpoint: null }; // Null generic checkpoint, use array
+}
+
+function validateLevelPath(level) {
+    const plats = level.platforms;
+    const MAX_GAP = CONFIG.MAX_GAP;
+    const MAX_H = CONFIG.MAX_HEIGHT_DIFF;
+    
+    for (let i = 0; i < plats.length - 1; i++) {
+        let p1 = plats[i];
+        let p2 = plats[i+1];
+        
+        let rightEdge1 = (p1.baseX !== undefined ? p1.baseX : p1.x) + p1.w;
+        let leftEdge2 = (p2.baseX !== undefined ? p2.baseX : p2.x);
+        let y1 = (p1.baseY !== undefined ? p1.baseY : p1.y);
+        let y2 = (p2.baseY !== undefined ? p2.baseY : p2.y);
+        
+        let gap = leftEdge2 - rightEdge1;
+        let hDiff = y1 - y2; 
+        
+        if (gap > MAX_GAP) return false;
+        if (hDiff > MAX_H) return false;
+    }
+    return true;
+}
+
+function triggerGameStart() {
+    if(!isHost) return;
+    
+    toggleFullscreen();
+
+    // Broadcast Begin
+    broadcast({ type: 'GAME_BEGIN' });
+    
+    // Fade for Host
+    const fade = document.getElementById('fade-overlay');
+    fade.style.opacity = 1;
+    
+    setTimeout(() => {
+        startGame();
+        fade.style.opacity = 0;
+    }, 2000);
+}
+
+function toggleFullscreen() {
+    // 1. Expand
+    try {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.log(`Error attempting to enable fullscreen: ${err.message} (${err.name})`);
+            });
+        }
+    } catch(e) { console.log("FS Error", e); }
+    
+    // 2. Lock Orientation
+    try {
+        if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(e => {
+                console.log("Orientation lock failed/blocked", e); 
+                // Fallback handled by CSS media query
+            });
+        }
+    } catch(e) { console.log("Orientation API missing"); }
+}
+
+function startGame() {
+    if(!isHost) return;
+    level = 1;
+    levelData = generateLevel(level);
+    
+    resetLevelPhysics();
+    
+    // Stats Init
+    levelStartTime = Date.now();
+    levelDeaths = 0;
+    
+    gameRunning = true;
+    
+    // SYNC START
+    broadcast({ type: 'START', level: levelData, lvNum: level, players: players });
+    
+    AudioSys.startBGM();
+    uiSet(STATE.PLAYING);
+    resize();
+    gameLoop();
+}
+
+function startGameClient() {
+    gameRunning = true;
+    AudioSys.startBGM();
+    uiSet(STATE.PLAYING);
+    resize();
+    gameLoop(); 
+}
+
+function triggerWin() {
+    if(!isHost) return;
+    
+    // Freeze
+    gameRunning = false;
+    physicsEnabled = false;
+    
+    // Audio
+    AudioSys.stopBGM(); // Immediate stop as requested by "fade out" implementation being skipped for simplicity/robustness match with current system
+    AudioSys.play('win'); // "Victory" sound
+    
+    // Stats
+    const timeTaken = ((Date.now() - levelStartTime) / 1000).toFixed(1);
+    const stats = { time: timeTaken, deaths: levelDeaths };
+    
+    // Sync
+    broadcast({ type: 'GAME_WON', stats: stats, level: level });
+    
+    // UI
+    showWinScreen(stats);
+}
+
+function nextLevel() {
+    if(!isHost) return;
+    
+    document.getElementById('win-screen').classList.remove('visible');
+    
+    level++;
+    // Regen level
+    levelData = generateLevel(level);
+    
+    // Players will be reset in timeout
+    
+    // Reset Stats
+    levelStartTime = Date.now();
+    levelDeaths = 0;
+    
+    showOverlay("LEVEL " + level, "Get Ready...", false);
+    broadcast({type: 'UI_CHANGE', mode: 'MSG', title: "LEVEL "+level, msg: "Get Ready..."});
+    
+    setTimeout(() => {
+        resetLevelPhysics();
+        gameRunning = true;
+        broadcast({ type: 'START', level: levelData, lvNum: level, players: players }); 
+        uiSet(STATE.PLAYING);
+        AudioSys.startBGM(); 
+    }, 2000);
+}
+
+function triggerGameOver() {
+    if(!isHost) return;
+    gameRunning = false;
+    physicsEnabled = false;
+    broadcast({ type: 'GAME_OVER_SCREEN' });
+    showGameOverScreen();
+}
+
+function showGameOverScreen() {
+    let overlay = document.getElementById('overlay-screen');
+    let title = overlay.querySelector('h1');
+    let msg = overlay.querySelector('p');
+    
+    title.innerText = "DEFEAT";
+    title.style.color = "#ff4757";
+    msg.innerText = "Consumed by the Void";
+    
+    overlay.classList.add('visible');
+    
+    // UI Logic: Host gets Restart, Guest gets Waiting
+    let btnContainer = document.getElementById('overlay-btn-container');
+    if (isHost) {
+        btnContainer.innerHTML = '<button onclick="resetGame()">RESTART LEVEL</button>';
+    } else {
+        btnContainer.innerHTML = '<p style="color:#e94560; animation: pulse 1s infinite;">Waiting for Host to Restart...</p>';
+    }
+}
+
+function resetGame() {
+    if(isHost) {
+        // Reset World Border
+        deathWallX = -500; // Reset to initial
+        currentSpawnPoint = { x: 100, y: 360 };
+        if(levelData.checkpoints) levelData.checkpoints.forEach(c => c.active = false);
+        
+        broadcast({ type: 'RESTART_CONFIRMED' });
+        
+        // Hide overlay locally
+        document.getElementById('overlay-screen').classList.remove('visible');
+        
+        startGame();
+    }
+}
+
+function quitGame() {
+    if(isHost) {
+        broadcast({ type: 'SESSION_TERMINATED' });
+        cleanupAndExit(null);
+    } else {
+        broadcast({ type: 'PARTNER_LEFT' });
+        cleanupAndExit(null);
+    }
+}
+
+function cleanupAndExit(msg) {
+    if(msg) alert(msg);
+
+    // Stop & Reset
+    currentState = STATE.MENU;
+    gameRunning = false;
+    
+    // Clear Network
+    if(peer) {
+        peer.destroy();
+        peer = null;
+    }
+    connections = [];
+    myId = null;
+    hostId = null;
+    isHost = false;
+    myIdx = 0;
+    
+    // Reset Globals
+    level = 1;
+    camX = 0; camY = 0;
+    players = [];
+    chains = [];
+    levelData = { platforms: [], spikes: [], goal: {x:0,y:0} };
+    inputBuffer = [ {}, {}, {}, {} ];
+    
+    // Reset Audio/Voice
+    if(VoiceSys.stream) {
+        VoiceSys.stream.getTracks().forEach(t => t.stop());
+        VoiceSys.stream = null;
+        VoiceSys.updateBtn();
+    }
+    VoiceSys.calls = {};
+    document.querySelectorAll('audio').forEach(e => e.remove());
+
+    // Reset UI
+    uiSet(STATE.MENU);
+    
+    // Cleanup Overlay
+    const fade = document.getElementById('fade-overlay');
+    fade.style.opacity = 0;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+
+// --- PHYSICS ENGINE ---
+
+function initPlayerVisuals(p) {
+    // Hair
+    if (!p.hair) {
+        p.hair = [];
+        for(let i=0; i<3; i++) {
+             let strand = [];
+             for(let j=0; j<3; j++) {
+                 strand.push({x: p.x, y: p.y, px: p.x, py: p.y});
+             }
+             p.hair.push(strand);
+        }
+    }
+    // Expression
+    p.expression = 'IDLE';
+    p.faceDir = 1;
+    p.pupilX = 0; p.pupilY = 0;
+    p.blush = false;
+}
+
+function resetLevelPhysics(isRespawn = false) {
+    physicsEnabled = false;
+    
+    // 1. Reset Players
+    players.forEach((p, i) => {
+        if (!p.connected) return;
+        
+        initPlayerVisuals(p);
+
+        // Spawn Offset (Prevent stacking)
+        // Use currentSpawnPoint instead of hardcoded 100
+        p.x = currentSpawnPoint.x + (i * 40); 
+        p.y = currentSpawnPoint.y; 
+        
+        // Velocity Zeroing
+        p.vx = 0; 
+        p.vy = 0;
+        
+        // Ground Snap
+        p.onGround = true; 
+        p.dead = false;
+        p.jumping = false;
+        p.coyote = 0;
+        p.jumpTimer = 0;
+    });
+    
+    // Reset Globals
+    if (!isRespawn) {
+        deathWallX = -500;
+        currentSpawnPoint = { x: 100, y: 360 };
+        // Reset Checkpoint state if hard reset
+        if (levelData.checkpoints) {
+            levelData.checkpoints.forEach(cp => cp.active = false);
+        } else if (levelData.checkpoint) {
+            levelData.checkpoint.active = false;
+        }
+    } 
+    // ELSE: Do not touch DeathWallX on respawn (Persistent Difficulty)
+
+    // 2. Rope Warm-start
+    for(let i=0; i<players.length-1; i++) {
+        if(players[i].connected && players[i+1].connected) {
+            let pA = players[i];
+            let pB = players[i+1];
+            
+            // Re-create chain perfectly between points
+            chains[i] = [];
+            const NUM_NODES = 10;
+            for(let j=1; j<=NUM_NODES; j++) {
+                let t = j / (NUM_NODES+1);
+                let mx = pA.x + (pB.x-pA.x)*t;
+                let my = pA.y + (pB.y-pA.y)*t;
+                chains[i].push({
+                    x: mx, y: my,
+                    px: mx, py: my
+                });
+            }
+        } else {
+            chains[i] = null;
+        }
+    }
+    
+    // 3. Physics Sleep
+    setTimeout(() => {
+        physicsEnabled = true;
+    }, 100);
+}
+
+// --- RESPAWN & RESTARTS --- //
+
+// Replaced triggerRespawn with globalRespawn to support Auto-Checkpoints
+function globalRespawn(forceHardReset = false) {
+    // 1. Determine Spawn Point (Hard Reset or Checkpoint?)
+    let spawnPt = currentSpawnPoint || { x: 100, y: 360 };
+    if (forceHardReset) {
+        spawnPt = { x: 100, y: 360 };
+        currentSpawnPoint = spawnPt;
+        deathWallX = -500;
+        // Reset Checkpoints to inactive
+        if (levelData.checkpoints) levelData.checkpoints.forEach(c => c.active = false);
+    } 
+
+    console.log("Global Respawn Triggered. Target:", spawnPt);
+
+    // 2. Pause & State Lock
+    gameRunning = false;
+    physicsEnabled = false;
+    waitingForReset = true;
+    resetReadyCount = 1; // Host is 1
+
+    // 3. Reset All Players (Velocity Purge)
+    players.forEach((p, i) => {
+        if(!p.connected) return;
+        
+        // Snap Position
+        p.x = spawnPt.x + (i * 40); // Stagger slightly
+        p.y = spawnPt.y;
+        
+        // Zero Velocity (Critical for preventing elastic snap)
+        p.vx = 0; p.vy = 0;
+        p.lastVx = 0; p.lastVy = 0;
+        p.jumping = false;
+        p.coyote = 0;
+        p.onGround = true; 
+        
+        // Status
+        p.dead = false;
+        p.invincible = true;
+        p.invincibleTimer = 90; // 1.5s invincibility
+        p.expression = 'IDLE';
+        p.hair = null; // Reset hair sim
+    });
+
+    // 4. Reset Camera & World
+    camX = spawnPt.x;
+    camY = spawnPt.y;
+    
+    // Death Wall Logic: 
+    // Independent State - Do NOT reset on respawn.
+    // Only pulled back on hard reset (already handled above if forceHardReset)
+
+    // 5. Reset Mechanics (Ropes & Platforms)
+    chains = []; // Destructive Clear
+    
+    // Re-Initialize Ropes at safe positions
+    for(let i=0; i<players.length-1; i++) {
+        if(players[i].connected && players[i+1].connected) {
+            let pA = players[i];
+            let pB = players[i+1];
+            
+            chains[i] = [];
+            const NUM_NODES = 10;
+            // Create relaxed rope
+            for(let j=1; j<=NUM_NODES; j++) {
+                let t = j / (NUM_NODES+1);
+                let mx = pA.x + (pB.x-pA.x)*t;
+                let my = pA.y + (pB.y-pA.y)*t;
+                chains[i].push({
+                    x: mx, y: my,
+                    px: mx, py: my // Zero velocity nodes
+                });
+            }
+        } else {
+            chains[i] = null;
+        }
+    }
+
+    // Reset Platforms
+    levelData.platforms.forEach(plat => {
+         // Reset Crumble
+         if(plat.type === 'crumble') {
+             plat.crumbling = false;
+             plat.crumbleTimer = 0;
+             if(plat.originalW) { plat.w = plat.originalW; plat.h = plat.originalH; }
+         }
+         // Reset Moving Platforms
+         if (plat.moving) {
+            plat.x = plat.baseX;
+            plat.y = plat.baseY;
+            plat.time = 0; 
+            levelData.spikes.forEach(s => {
+                if (s.parent !== undefined && levelData.platforms[s.parent] === plat) {
+                    s.x = plat.x + s.relX;
+                    s.y = plat.y + s.relY;
+                }
+            });
+         }
+    });
+
+    // 6. Broadcast AUTO_RESPAWN Handshake
+    broadcast({ 
+        type: 'AUTO_RESPAWN', 
+        players: players,   // Contains purged velocities
+        chains: chains,     // Contains fresh relaxed ropes
+        dw: deathWallX,
+        x: camX, 
+        y: camY
+    });
+
+    // Host check immediately (solos or if connections drop)
+    checkResetComplete();
+}
+
+function checkResetComplete() {
+    if(!waitingForReset) return; 
+    
+    const activeClients = connections.filter(c => c.open).length;
+    const totalRequired = 1 + activeClients;
+    
+    if (resetReadyCount >= totalRequired) {
+        console.log("All Players Ready -> Resuming Physics");
+        waitingForReset = false;
+        physicsEnabled = true;
+        gameRunning = true;
+        
+        // Remove 'You Died' UI if present
+        broadcast({ type: 'UI_CHANGE', mode: 'MSG_CLEAR' });
+        // Local clear
+        document.getElementById('overlay-screen').classList.remove('visible');
+    }
+}
+// Legacy wrapper
+function triggerRespawn() { globalRespawn(true); } 
+
+function respawnAtCheckpoint() {
+    // Deprecated by immediate globalRespawn, but kept for UI flows if needed
+    broadcast({ type: 'UI_CHANGE', mode: 'MSG', title: "RESPAWNING", msg: "Resetting..." });
+    setTimeout(() => { globalRespawn(false); }, 100); 
+}
+
+
+function updatePhysics() {
+    if (!isHost) return;
+    if (!physicsEnabled) return;
+    
+    // Global Updates
+    const wallSpeed = 0.5 + (level * 0.1); 
+    deathWallX += wallSpeed;
+    updateParticles();
+    if(shake > 0) shake *= 0.8; if(shake < 0.5) shake = 0;
+
+    players.forEach(p => {
+        if(p.invincible) {
+            p.invincibleTimer--;
+            if(p.invincibleTimer <= 0) p.invincible = false;
+        }
+    });
+
+    // Apply Inputs
+    inputBuffer[0] = localInput; // My input
+    
+    players.forEach((p, i) => {
+        if (!p.connected) return;
+        
+        let inp = inputBuffer[i] || {};
+
+        // Check Anchor Status (High Tension + Neighbor in Air)
+        let isAnchor = false;
+        let ropeTension = 0;
+        let activeNeighbors = []; // indices of partners pulling me
+        
+        // Define neighbor check
+        const checkNeighbor = (idx) => {
+             if (chains[Math.min(i, idx)] && players[idx].connected) {
+                 let other = players[idx];
+                 let dist = Math.sqrt((p.x-other.x)**2 + (p.y-other.y)**2);
+                 if (dist > CONFIG.ROPE_LEN * 0.9 && !other.onGround) {
+                     isAnchor = true;
+                     ropeTension = dist / CONFIG.ROPE_LEN;
+                     activeNeighbors.push(idx);
+                 }
+                 
+                 // Winch Mechanic? 
+                 // If both press UP (y < -0.5)
+                 let otherInp = inputBuffer[idx] || {};
+                 if (inp.y < -0.5 && otherInp.y < -0.5) {
+                     // Handled in Rope Physics loop usually, but we can flag it
+                     // Or apply force here?
+                     // "Slowly decrease ROPE_LENGTH temporarily" -> apply force towards each other
+                     p.winching = true;
+                 } else { p.winching = false; }
+             }
+        };
+
+        if (i > 0) checkNeighbor(i-1);
+        if (i < players.length - 1) checkNeighbor(i+1);
+        
+        // State Machine Update
+        p.expression = 'IDLE';
+        // Direction
+        if (Math.abs(p.vx) > 0.1) p.faceDir = Math.sign(p.vx);
+        
+        // Check Near Partner
+        let nearPartner = false;
+        if (i > 0 && players[i-1].connected && Math.sqrt((p.x-players[i-1].x)**2 + (p.y-players[i-1].y)**2) < 100) nearPartner = true;
+        if (i < players.length-1 && players[i+1].connected && Math.sqrt((p.x-players[i+1].x)**2 + (p.y-players[i+1].y)**2) < 100) nearPartner = true;
+        p.blush = nearPartner;
+        
+        if (p.dead) p.expression = 'DEAD';
+        else if (ropeTension > 0.95 || activeNeighbors.length > 0) p.expression = 'STRAIN';
+        else if (!p.onGround) {
+            if (p.vy < 0) p.expression = 'JUMP';
+            else p.expression = 'FALL';
+        } 
+        else if (nearPartner) p.expression = 'HAPPY';
+
+        // --- INPUT HANDLING (Only if alive) ---
+        if (!p.dead) {
+            // Move
+            if (inp.x) {
+                let accel = p.onGround ? CONFIG.SPEED : CONFIG.AIR_ACCEL;
+                // Crawl Mechanic: Anchor moves slower to pull
+                if (isAnchor && p.onGround) accel *= 0.5; 
+                
+                p.vx += inp.x * accel;
+                
+                // Direct Position Displacement (Rescue Pull Fix)
+                // If I am anchored and moving, pull them visually up/over
+                if (isAnchor && p.onGround) {
+                    activeNeighbors.forEach(nIdx => {
+                        let n = players[nIdx];
+                        let dx = n.x - p.x;
+                        
+                        // Check if moving generally away or just moving while anchored
+                        // The user said: "When the rope is at max_length and the 'Anchor' player moves..."
+                        // Let's apply if we are putting tension on
+                        // Tension check:
+                         if ((dx > 0 && inp.x < 0) || (dx < 0 && inp.x > 0)) {
+                             // Horizontal haul
+                             n.x += inp.x * accel * 0.8;
+                             n.vx += inp.x * accel * 0.5;
+                             
+                             // Vertical Haul (The Fix)
+                             // Apply 50% of displacement to Y
+                             let displacement = Math.abs(inp.x * accel);
+                             n.y -= displacement * 0.5;
+                             n.vy -= displacement * 0.2; // Momentum up
+                        }
+                    });
+                }
+            }
+            
+            // Velocity Cap using Math.sign
+            let currentMax = p.onGround ? CONFIG.MAX_SPEED : CONFIG.MAX_AIR_SPEED;
+            if (Math.abs(p.vx) > currentMax) {
+                p.vx = Math.sign(p.vx) * currentMax;
+            }
+            
+            // Variable Jump Height & Coyote Time
+             if (p.onGround) p.coyote = CONFIG.COYOTE_TIME;
+             if (p.coyote > 0) p.coyote--;
+
+            // Jump Logic with Hold Boost
+            if (inp.jump) {
+                // Rescue Pull (Pulling Strength)
+                if (isAnchor && p.onGround) {
+                     // Lift partners
+                     activeNeighbors.forEach(nIdx => {
+                         players[nIdx].y -= CONFIG.PULL_FORCE;
+                         players[nIdx].vy -= 0.5; // slight upward momentum
+                     });
+                     // Don't jump yourself if doing a heavy pull? 
+                     // Or allow both? Original request: "If grounded player holds jump... increase lift"
+                     // Assuming we still want jump behavior capability, but maybe damped?
+                     // Let's allow standard jump logic below to proceed, 
+                     // but maybe the "Anchor" weight makes the jump shorter naturally due to mechanics?
+                }
+
+                // Initial Jump
+                if (p.coyote > 0 && !p.jumping) { 
+                    p.vy = -CONFIG.JUMP;
+                    
+                    // Squash & Stretch: Jump
+                    p.scaleY = 1.4; p.scaleX = 0.6;
+                    
+                    // Forward Leap Boost
+                    if (Math.abs(p.vx) > CONFIG.MAX_SPEED * 0.5) {
+                         p.vx += Math.sign(p.vx) * 2;
+                    }
+
+                    p.onGround = false;
+                    p.coyote = 0;
+                    p.jumping = true;
+                    p.jumpTimer = 15; // 15 frames of boost
+                    AudioSys.play('jump');
+                }
+                // Jump Hold Boost
+                else if (p.jumping && p.jumpTimer > 0) {
+                     p.vy -= 0.2; // Extra boost while holding
+                     p.jumpTimer--;
+                }
+            } else {
+                p.jumping = false;
+                p.jumpTimer = 0;
+                // Cut velocity if key released (Variable Jump Fallback)
+                if (p.vy < -5) p.vy *= 0.5;
+            }
+        } else {
+            // Dead Weight Physics (Dampened)
+            p.vx *= 0.95; 
+        }
+
+        // --- GLOBAL PHYSICS (Alive or Dead) ---
+        
+        // Gravity & Friction (Ice Aware)
+        p.vy += CONFIG.GRAVITY;
+        let fric = p.onIce ? 0.98 : CONFIG.FRICTION;
+        if (!p.onGround) fric = 1.0; // Air Control / Momentum Preserve
+        
+        // Anchor Friction (Stronger resistance)
+        // Request: multiply grounded friction by 1.5 (interpretation: stop faster)
+        // Normal friction reduction is (1 - 0.85) = 0.15. 
+        // 1.5x reduction = 0.225. Resulting coeff = 0.775.
+        // Let's go even harder for game feel: 0.6
+        if (isAnchor && p.onGround && !p.onIce) fric = 0.6;
+        
+        p.vx *= fric; 
+        p.onIce = false; 
+
+        // Squash Recovery
+        if(!p.scaleX) p.scaleX = 1; if(!p.scaleY) p.scaleY = 1;
+        p.scaleX += (1 - p.scaleX) * 0.2; p.scaleY += (1 - p.scaleY) * 0.2;
+
+        p.x += p.vx;
+        p.y += p.vy;
+        
+        // Face & Hair Physics
+        if (!p.hair) initPlayerVisuals(p);
+        
+        // Pupil Tracking
+        if (p.expression !== 'DEAD') {
+            let targetX = p.x + p.faceDir * 20; 
+            let targetY = p.y;
+            // If dragging, look at neighbor
+            if (activeNeighbors.length > 0) {
+                 let n = players[activeNeighbors[0]];
+                 if(n) { targetX = n.x; targetY = n.y; }
+            } else if (nearPartner) {
+                // look at nearest
+                let nearest = players.find((pl, idx) => idx !== i && pl.connected && Math.sqrt((p.x-pl.x)**2 + (p.y-pl.y)**2) < 150);
+                if (nearest) { targetX = nearest.x; targetY = nearest.y; }
+            }
+            
+            // Smooth Pupil
+            let dx = targetX - p.x; let dy = targetY - p.y;
+            let ang = Math.atan2(dy, dx);
+            let dist = Math.min(3, Math.sqrt(dx*dx + dy*dy) * 0.05);
+            let px = Math.cos(ang) * dist;
+            let py = Math.sin(ang) * dist;
+            
+            p.pupilX += (px - p.pupilX) * 0.3;
+            p.pupilY += (py - p.pupilY) * 0.3;
+        }
+
+        // Hair Sim
+        p.hair.forEach((strand, sIdx) => {
+             // Root Position
+             let rootX = p.x + (sIdx - 1) * 6 * p.scaleX;
+             let rootY = p.y - 12 * p.scaleY; // Top of head
+             
+             // Base is attached
+             strand[0].x = rootX; strand[0].y = rootY;
+             
+             // Verlet
+             for(let k=1; k<3; k++) {
+                 let node = strand[k];
+                 let vx = (node.x - node.px) * 0.9;
+                 let vy = (node.y - node.py) * 0.9;
+                 // Gravity reversed slightly for puffy hair? No usually down.
+                 // User said "flow upward" when falling
+                 let grav = (p.expression === 'FALL' || p.expression === 'JUMP') ? -0.5 : 0.5;
+                 
+                 node.px = node.x;
+                 node.py = node.y;
+                 node.x += vx;
+                 node.y += vy + grav;
+                 
+                 // Constraint
+                 let prev = strand[k-1];
+                 let ddx = node.x - prev.x;
+                 let ddy = node.y - prev.y;
+                 let d = Math.sqrt(ddx*ddx + ddy*ddy);
+                 let len = 6;
+                 if (d > len) {
+                     let f = (d-len)/d;
+                     node.x -= ddx * f;
+                     node.y -= ddy * f;
+                 }
+             }
+        });
+
+        // World Bounds (Void & Death Wall)
+        if (p.y > 2000 || p.x < deathWallX) { 
+             if(!p.dead) {
+                 levelDeaths++; 
+                 p.dead = true;
+                 broadcast({type: 'EVENT', name: 'DIE'});
+             }
+             
+             if(players.every(pl => !pl.connected || pl.dead)) {
+                 checkGameOver();
+             }
+        }
+    });
+
+    // Moving Platforms & Crumbling Blocks & Checkpoint
+    levelData.platforms.forEach((plat, idx) => {
+        // Crumbling Logic
+        if (plat.type === 'crumble' && plat.crumbling) {
+             plat.crumbleTimer += 1;
+             plat.dx = (Math.random() - 0.5) * 5; // Shake
+             plat.dy = (Math.random() - 0.5) * 5;
+             
+             if (plat.crumbleTimer > 90) { // 1.5s
+                 // Disable Platform
+                 plat.w = 0; 
+                 plat.h = 0;
+                 // Visual removal done in Draw
+             }
+        }
+        
+        if(plat.moving) {
+            plat.time += plat.speed;
+            const osc = Math.sin(plat.time);
+            const preX = plat.x;
+            const preY = plat.y;
+            plat.x = plat.baseX + (plat.dx||0) * osc;
+            plat.y = plat.baseY + (plat.dy||0) * osc;
+            
+            // Push players on top
+            players.forEach(p => {
+                if(p.connected && // Apply to DEAD players too so they get carried
+                   p.x + 10 > plat.x && p.x - 10 < plat.x + plat.w &&
+                   p.y + 12 >= preY && p.y + 12 <= preY + 10) { // rough check
+                    p.x += (plat.x - preX);
+                    p.y += (plat.y - preY);
+                }
+            });
+            
+            levelData.spikes.forEach(s => {
+                if (s.parent === idx) {
+                    s.x = plat.x + s.relX;
+                    s.y = plat.y + s.relY;
+                }
+            });
+        }
+    });
+
+    // Rope Physics (Segmented Chain)
+    // Init Chains if needed
+    for(let i=0; i<players.length-1; i++) {
+        if(!players[i].connected || !players[i+1].connected) {
+            chains[i] = null;
+            continue;
+        }
+        
+        let pA = players[i];
+        let pB = players[i+1];
+        
+        // Init chain if missing or just reconnected
+        if(!chains[i]) {
+            chains[i] = [];
+            const NUM_NODES = 10;
+            for(let j=1; j<=NUM_NODES; j++) {
+                let t = j / (NUM_NODES+1);
+                chains[i].push({
+                    x: pA.x + (pB.x-pA.x)*t,
+                    y: pA.y + (pB.y-pA.y)*t,
+                    px: pA.x + (pB.x-pA.x)*t,
+                    py: pA.y + (pB.y-pA.y)*t
+                });
+            }
+        }
+        
+        // Physics for Chain Nodes
+        let chain = chains[i];
+        if (chain) {
+            chain.forEach(node => {
+                // Gravity
+                node.py += CONFIG.GRAVITY;
+
+                // Verlet Integration (Inertia)
+                let vx = node.x - node.px;
+                let vy = node.y - node.py;
+                
+                node.px = node.x;
+                node.py = node.y;
+                
+                node.x += vx * 0.95; 
+                node.y += vy * 0.95 + CONFIG.GRAVITY;
+            });
+            
+            // Constraints (Relaxation Loop)
+            // Winch Mechanic: If both players signaling 'winch', shorten the rope target
+            let ropeTarget = CONFIG.ROPE_LEN;
+            // Check players attached to this chain
+            // chain[i] connects players[i] and players[i+1]
+            let pStart = players[i];
+            let pEnd = players[i+1];
+            if (pStart && pEnd && pStart.winching && pEnd.winching) {
+                // Shorten
+                ropeTarget = CONFIG.ROPE_LEN * 0.5; // Shorten to 50%
+            }
+
+            const SEGMENT_LEN = ropeTarget / (chain.length + 1);
+            const ITERATIONS = 12; // Increased iterations
+            
+            for(let it=0; it<ITERATIONS; it++) {
+                // Link P1 -> Node 0
+                solveLink(pA, chain[0], SEGMENT_LEN);
+                
+                // Internal Links
+                for(let k=0; k<chain.length-1; k++) {
+                    solveLink(chain[k], chain[k+1], SEGMENT_LEN);
+                }
+                
+                // Link Node Last -> P2
+                solveLink(chain[chain.length-1], pB, SEGMENT_LEN);
+            
+                // COLLISION RESOLUTION (Inside loop prevents tunneling)
+                chain.forEach(node => {
+                     levelData.platforms.forEach(plat => {
+                        // Expand collision box slightly (radius of rope)
+                        if (node.x > plat.x - 2 && node.x < plat.x + plat.w + 2 &&
+                            node.y > plat.y - 2 && node.y < plat.y + plat.h + 2) {
+                            
+                            let dL = node.x - plat.x;
+                            let dR = (plat.x + plat.w) - node.x;
+                            let dT = node.y - plat.y;
+                            let dB = (plat.y + plat.h) - node.y;
+                            
+                            let min = Math.min(dL, dR, dT, dB);
+                            
+                            // Snap to edge
+                            if(min === dT) { node.y = plat.y - 2; }
+                            else if(min === dB) { node.y = plat.y + plat.h + 2; }
+                            else if(min === dL) { node.x = plat.x - 2; }
+                            else { node.x = plat.x + plat.w + 2; }
+                        }
+                    });
+                });
+            }
+        }
+    }
+
+    // Helper for Stick Constraint
+    function solveLink(n1, n2, len) {
+    let dx = n2.x - n1.x;
+    let dy = n2.y - n1.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    
+    if(dist > len) {
+        let diff = dist - len;
+        let nx = dx / dist;
+        let ny = dy / dist;
+        
+        let isP1 = n1.connected !== undefined;
+        let isP2 = n2.connected !== undefined;
+        
+        if(isP1 && isP2) {
+             let w1 = n1.onGround ? 0.9 : 0.5;
+             let w2 = n2.onGround ? 0.9 : 0.5;
+             let sum = w1 + w2;
+             w1 /= sum; w2 /= sum;
+             
+             // Dampening
+             let tensionMult = 1;
+             // If moving towards each other?
+             // Relative velocity along normal
+             let rv = (n2.vx - n1.vx)*nx + (n2.vy - n1.vy)*ny; 
+             if (rv < 0) tensionMult = 0.5; // Closing distance
+
+             n1.x += nx * diff * w2;
+             n1.y += ny * diff * w2;
+             n2.x -= nx * diff * w1;
+             n2.y -= ny * diff * w1;
+             
+             let force = diff * 0.01 * tensionMult;
+             n1.vx += nx * force * w2;
+             n1.vy += ny * force * w2;
+             n2.vx -= nx * force * w1;
+             n2.vy -= ny * force * w1;
+        } 
+        else if (isP1) {
+             // Player vs Node
+             n1.x += nx * diff * 0.1; 
+             n1.y += ny * diff * 0.1;
+             n2.x -= nx * diff * 0.9;
+             n2.y -= ny * diff * 0.9;
+             
+             // Tension Dampening
+             let dot = n1.vx * nx + n1.vy * ny; // Moving towards node?
+             let damp = (dot > 0) ? 0.5 : 1.0;
+             
+             n1.vx += nx * diff * 0.01 * damp;
+             n1.vy += ny * diff * 0.01 * damp;
+        }
+        else if (isP2) {
+             // Node vs Player
+             n1.x += nx * diff * 0.9;
+             n1.y += ny * diff * 0.9;
+             n2.x -= nx * diff * 0.1;
+             n2.y -= ny * diff * 0.1;
+
+             // Tension Dampening (Pulling P2 towards Node, direction -nx, -ny)
+             let dot = n2.vx * (-nx) + n2.vy * (-ny);
+             let damp = (dot > 0) ? 0.5 : 1.0;
+
+             n2.vx -= nx * diff * 0.01 * damp;
+             n2.vy -= ny * diff * 0.01 * damp;
+        }
+        else {
+             // Node vs Node
+             n1.x += nx * diff * 0.5;
+             n1.y += ny * diff * 0.5;
+             n2.x -= nx * diff * 0.5;
+             n2.y -= ny * diff * 0.5;
+        }
+    }
+}
+
+function dummy() {} // Placeholder to consume closing brace inside replace helper if needed
+/* End Physics update */
+
+    // Collisions
+    players.forEach(p => {
+        if(!p.connected) return;
+        // Dead players also collide with world
+        p.onGround = false;
+        
+        // Platforms
+        levelData.platforms.forEach(plat => {
+            // AABB
+            if (p.x + 12 > plat.x && p.x - 12 < plat.x + plat.w &&
+                p.y + 12 > plat.y && p.y - 12 < plat.y + plat.h) {
+                
+                // Resolve
+                let oX = (Math.min(p.x+12, plat.x+plat.w) - Math.max(p.x-12, plat.x));
+                let oY = (Math.min(p.y+12, plat.y+plat.h) - Math.max(p.y-12, plat.y));
+                
+                if (oX < oY) {
+                    // X collision
+                    if (p.x < plat.x + plat.w/2) p.x -= oX; else p.x += oX;
+                    p.vx = 0;
+                    if(plat.type === 'bounce') { p.vx *= -1.5; }
+                } else {
+                    // Y collision
+                    if (p.y < plat.y + plat.h/2) {
+                        p.y -= oY;
+                        p.vy = 0;
+                        p.onGround = true;
+                        
+                        // Hazard Logic
+                        if(plat.type === 'ice') {
+                             p.onIce = true;
+                        } else if(plat.type === 'crumble') {
+                             if (!plat.crumbling) {
+                                 plat.crumbling = true; 
+                                 // Broadcast crumble start handled by state update
+                             }
+                        } else if(plat.type === 'bounce') {
+                             p.vy = -22; // Super Bounce
+                             p.onGround = false;
+                             shake = 10;
+                             spawnParticle(p.x, p.y+12, '#55efc4', 'sparkle');
+                             p.scaleY = 1.5; p.scaleX = 0.6; // Stretch
+                             AudioSys.play('jump'); // Boing sound for bounce
+                        } else {
+                            // Normal Landing Juice
+                            if(!p.wasOnGround) {
+                                p.scaleY = 0.7; p.scaleX = 1.3; // Squash
+                                if(Math.abs(p.lastVy) > 12) {
+                                    shake = 5;
+                                    spawnParticle(p.x, p.y+12, '#fff', 'dust');
+                                    AudioSys.play('land');
+                                }
+                            }
+                        }
+                    } else {
+                        p.y += oY;
+                        p.vy = 0;
+                    }
+                }
+            }
+        });
+        p.wasOnGround = p.onGround; // Track for landing detection
+        p.lastVy = p.vy;
+        
+        // Spikes
+        if (!p.dead && !p.invincible) { // Only alive players die on spikes
+            levelData.spikes.forEach(s => {
+                if (p.x + 10 > s.x && p.x - 10 < s.x + s.w &&
+                    p.y + 10 > s.y && p.y - 10 < s.y + s.h) {
+                    // Instant Global Respawn on Hazard Contact
+                    if(isHost) {
+                        spawnParticle(p.x, p.y, '#ff0000', 'explosion');
+                        AudioSys.play('die');
+                        globalRespawn(false); // Checkpoint reset
+                    }
+                }
+            });
+            
+            // Hearts
+            if (levelData.hearts) {
+                levelData.hearts.forEach(h => {
+                    if (!h.collected && 
+                        Math.sqrt((p.x-h.x)**2 + (p.y-h.y)**2) < 20) {
+                        h.collected = true;
+                        spawnParticle(h.x, h.y, '#ff4d4d', 'sparkle');
+                        AudioSys.play('collect');
+                    } 
+                });
+            }
+        }
+    });
+    
+    // Check Goal & Checkpoint & Urchins
+    let activePlayers = players.filter(p => p.connected && !p.dead);
+    
+    // Urchin Logic
+    if (levelData.urchins) {
+        levelData.urchins.forEach(u => {
+            // Move
+            u.rangeX += u.speed * u.dir; // rangeX logic needs to be robust
+            // Simplified: move along parent plat
+            let parent = levelData.platforms[u.parent];
+            if (parent) {
+                u.x += u.speed * u.dir;
+                let relX = u.x - parent.x;
+                
+                if (relX > parent.w - 15 || relX < 15) u.dir *= -1;
+                
+                // Keep On Platform
+                u.y = parent.y - 15;
+                u.x = parent.x + relX; // Sync
+                
+                // Collision
+                 activePlayers.forEach(p => {
+                    if (!p.invincible && Math.abs(p.x - u.x) < 20 && Math.abs(p.y - u.y) < 20) {
+                        // Instant Global Respawn on Urchin Contact
+                        if(isHost) {
+                             spawnParticle(p.x, p.y, '#ff0000', 'explosion');
+                             AudioSys.play('die');
+                             globalRespawn(false);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    if(activePlayers.length > 0) {
+        // Checkpoints (Multi-Stage)
+        if (levelData.checkpoints) {
+            levelData.checkpoints.forEach(cp => {
+                if(!cp.active) {
+                     let anyTouched = activePlayers.some(p => Math.abs(p.x - cp.x) < 30 && Math.abs(p.y - cp.y) < 40);
+                     if (anyTouched) {
+                         cp.active = true;
+                         // Set spawn to this checkpoint (ensure it's the furthest one if multiple touched? Usually sequential)
+                         if (cp.x > currentSpawnPoint.x) {
+                            currentSpawnPoint = { x: cp.x, y: cp.y - 20 };
+                         }
+                         
+                         AudioSys.play('collect'); 
+                         spawnParticle(cp.x, cp.y, '#2ed573', 'sparkle');
+                         
+                         // Heal/Respawn all dead players at this new checkpoint
+                         players.forEach(p=>{ 
+                             if(p.connected && p.dead) { 
+                                 p.dead = false; 
+                                 p.x = cp.x; 
+                                 p.y = cp.y - 20; 
+                                 p.vx = 0; p.vy = 0;
+                             } 
+                         });
+                         
+                         broadcast({type: 'UI_CHANGE', mode: 'MSG', title: "CHECKPOINT REACHED", msg: "Progress Saved!" });
+                     }
+                }
+            });
+        }
+        // Legacy Checkpoint
+        else if (levelData.checkpoint && !levelData.checkpoint.active) {
+             let cp = levelData.checkpoint;
+             let anyTouched = activePlayers.some(p => Math.abs(p.x - cp.x) < 30 && Math.abs(p.y - cp.y) < 40);
+             if (anyTouched) {
+                 cp.active = true;
+                 currentSpawnPoint = { x: cp.x, y: cp.y - 20 };
+                 AudioSys.play('collect'); 
+                 spawnParticle(cp.x, cp.y, '#2ed573', 'sparkle');
+                 players.forEach(p=>{ if(p.connected && p.dead) { p.dead = false; p.x=cp.x; p.y=cp.y-20; } });
+             }
+        }
+    
+        let anyAtGoal = activePlayers.some(p => {
+            let dx = p.x - levelData.goal.x;
+            let dy = p.y - levelData.goal.y;
+            return Math.sqrt(dx*dx + dy*dy) < (levelData.goal.r + 20); // Interaction Radius
+        });
+        
+        if (anyAtGoal) {
+             triggerWin();
+        }
+    }
+    
+    // Check Universal Game Over / Respawn Conditions
+    if(isHost) {
+        let shouldGameOver = false;
+        let shouldRespawn = false;
+
+        players.forEach(p => {
+             if(!p.connected) return;
+             
+             // 1. Check Death Wall (Any player, dead or alive)
+             if (p.x < deathWallX) {
+                 shouldGameOver = true;
+             }
+             
+             // 2. Check Fall / Void (Active Only)
+             if (!p.dead && p.y > 800) { 
+                 // Condition: If Wall Passed Checkpoint -> Game Over
+                 if (deathWallX > currentSpawnPoint.x) {
+                     shouldGameOver = true;
+                 } else {
+                     shouldRespawn = true;
+                 }
+             }
+        });
+        
+        if (shouldGameOver) {
+            triggerGameOver();
+        } else if (shouldRespawn) {
+            globalRespawn(false);
+        }
+    }
+
+    // Broadcast State (Throttled ideally, but 60hz for LAN/PeerJS is 'okay' for small data)
+    broadcast({ type: 'UPDATE', players: players, chains: chains, level: levelData, lvNum: level, dw: deathWallX });
+}
+
+function checkGameOver() {
+    // Legacy Stub - Respawns handled immediately now via globalRespawn
+}
+
+// Client Update Loop
+function updateClient() {
+    if (isHost) return;
+    
+    // Visuals
+    updateParticles();
+    if(shake > 0) shake *= 0.8; if(shake < 0.5) shake = 0;
+
+    // Send Input
+    if (connections[0] && connections[0].open) {
+        connections[0].send({ type: 'INPUT', input: localInput });
+    }
+    
+    // Position Interpolation & Prediction
+    const now = Date.now();
+    players.forEach((p, i) => {
+        if (!p.connected) return;
+        
+        // Init targets if needed
+        if (p.targetX === undefined) { 
+            p.targetX = p.x; p.targetY = p.y; p.lastUpdate = now; 
+        }
+        
+        // Prediction (Lag > 100ms)
+        if (now - p.lastUpdate > 100) {
+            p.x += p.vx;
+            p.y += p.vy;
+        } else {
+            // Smooth Glide (20% to target)
+            p.x += (p.targetX - p.x) * 0.2;
+            p.y += (p.targetY - p.y) * 0.2;
+        }
+    });
+}
+
+function draw() {
+    // Safety check just in case
+    if (!levelData || !levelData.platforms) return;
+    
+    // --- CAMERA LOGIC ---
+    let active = players.filter(p => p.connected && !p.dead);
+    let targets = active.length > 0 ? active : players.filter(p => p.connected); // Fallback to dead players if all dead
+    
+    let midX = 0, midY = 0;
+    if (targets.length > 0) {
+        let sumX = 0, sumY = 0;
+        targets.forEach(p => { sumX += p.x; sumY += p.y; });
+        midX = sumX / targets.length;
+        midY = sumY / targets.length;
+    } else {
+        midX = camX; midY = camY; // No targets, stay put (or default 0,0)
+    }
+
+    // Smooth Slide
+    camX += (midX - camX) * 0.1;
+    camY += (midY - camY) * 0.1;
+
+    // Boundary Padding (Don't view too far into void or sky)
+    // Constrain Y to a reasonable window relative to action
+    // Assuming action is roughly -2000 to 2000
+    if (camY > 1500) camY = 1500; // Don't look too deep into void
+    if (camY < -2500) camY = -2500; // Don't look too high
+
+    const ctx = canvas.getContext('2d');
+    
+    // BG
+    ctx.fillStyle = '#0f0c29';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Parallax Stars
+    // Stars move opposite to camera movement.
+    // If we simply use camX, it's the center point. 
+    ctx.fillStyle = '#ffffff';
+    for(let i=0; i<50; i++) {
+        let x = (i * 97 + camX * 0.05) % canvas.width;
+        let y = (i * 61 + camY * 0.05) % canvas.height; // Added Y parallax too
+        if (x < 0) x += canvas.width;
+        if (y < 0) y += canvas.height;
+        ctx.fillRect(x, y, 2, 2);
+    }
+
+    ctx.save();
+    
+    // Apply Dynamic Scaling for zoom effect
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    
+    // Shake
+    let shakeX = 0, shakeY = 0;
+    if(shake > 0) {
+        shakeX = (Math.random()-0.5)*shake;
+        shakeY = (Math.random()-0.5)*shake;
+    }
+
+    // CALCULATE OFFSET (Centering)
+    // internal dimensions
+    let interW = canvas.width / scale;
+    let interH = canvas.height / scale;
+    
+    let offsetX = (interW / 2) - camX;
+    let offsetY = (interH / 2) - camY;
+    
+    // Apply Translation (Offset + Shake)
+    ctx.translate(offsetX + shakeX, offsetY + shakeY);
+
+    // Death Wall
+    ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
+    ctx.fillRect(deathWallX - 2000, -1000, 2000, 4000); 
+    ctx.fillStyle = '#c0392b';
+    ctx.fillRect(deathWallX, -1000, 10, 4000);
+    
+    // Draw Level
+    // Platforms
+    levelData.platforms.forEach(p => {
+        if(p.type === 'crumble' && !p.crumbling) ctx.fillStyle = '#b2bec3'; // Gray
+        else if(p.type === 'crumble' && p.crumbling) ctx.fillStyle = '#636e72'; // Dark Gray
+        else if(p.type === 'ice') ctx.fillStyle = '#74b9ff';
+        else if(p.type === 'bounce') ctx.fillStyle = '#55efc4';
+        else ctx.fillStyle = '#6c5ce7';
+        
+        // Shake crumbling blocks
+        let offsetX = 0, offsetY = 0;
+        if(p.type === 'crumble' && p.crumbling) {
+            offsetX = p.dx || 0;
+            offsetY = p.dy || 0;
+        }
+
+        let drawX = p.x + offsetX;
+        let drawY = p.y + offsetY;
+
+        ctx.fillRect(drawX, drawY, p.w, p.h);
+        ctx.strokeStyle = '#a29bfe';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(drawX, drawY, p.w, p.h);
+
+        // Visual Hint for Crumble
+        if (p.type === 'crumble') {
+            ctx.fillStyle = '#2d3436';
+            ctx.beginPath();
+            ctx.arc(drawX + p.w/2, drawY + p.h/2, 5, 0, Math.PI*2);
+            ctx.fill();
+        }
+        
+        // Bolts
+        ctx.fillStyle='#ccc';
+        ctx.beginPath(); ctx.arc(p.x+5, p.y+5, 2, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x+p.w-5, p.y+5, 2, 0, 7); ctx.fill();
+    });
+    
+    // Draw Urchins
+    if (levelData.urchins) {
+        levelData.urchins.forEach(u => {
+            ctx.fillStyle = '#d63031'; // Red
+            ctx.beginPath();
+            ctx.arc(u.x, u.y, 15, 0, Math.PI * 2);
+            ctx.fill();
+            // Spikes (Visual)
+            ctx.strokeStyle = '#fff';
+            ctx.beginPath();
+            for(let i=0; i<8; i++) {
+                let ang = (i / 8) * Math.PI * 2;
+                ctx.moveTo(u.x + Math.cos(ang)*10, u.y + Math.sin(ang)*10);
+                ctx.lineTo(u.x + Math.cos(ang)*20, u.y + Math.sin(ang)*20);
+            }
+            ctx.stroke();
+        });
+    }
+
+    // Draw Checkpoint Flags
+    let drawCp = (cp) => {
+        ctx.fillStyle = cp.active ? '#2ed573' : '#ff4757';
+        // Pole
+        ctx.fillRect(cp.x, cp.y, 4, 40);
+        // Flag
+        ctx.beginPath();
+        ctx.moveTo(cp.x+4, cp.y);
+        ctx.lineTo(cp.x+30, cp.y+10);
+        ctx.lineTo(cp.x+4, cp.y+20);
+        ctx.fill();
+    };
+
+    if (levelData.checkpoints) {
+        levelData.checkpoints.forEach(cp => drawCp(cp));
+    } else if (levelData.checkpoint) {
+        drawCp(levelData.checkpoint);
+    }
+
+    // Spikes
+    ctx.fillStyle = '#ff4757';
+    levelData.spikes.forEach(s => {
+        ctx.beginPath();
+        for(let i=0; i<s.w; i+=10) {
+            ctx.lineTo(s.x+i, s.y+s.h);
+            ctx.lineTo(s.x+i+5, s.y);
+            ctx.lineTo(s.x+i+10, s.y+s.h);
+        }
+        ctx.fill();
+    });
+    
+    // Interactables
+    // Hearts
+    if(levelData.hearts) {
+        levelData.hearts.forEach(h => {
+             if(h.collected) return;
+             let pulse = Math.sin(Date.now() * 0.005) * 3;
+             ctx.fillStyle = '#ff4d4d';
+             ctx.font = `${20+pulse}px Arial`;
+             ctx.textAlign = 'center'; ctx.textBaseline='middle';
+             ctx.fillText("♥", h.x, h.y);
+        });
+    }
+
+    // Particles
+    particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 3 * p.life, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
+    });
+
+    // Goal (Polished Heart)
+    let gx = levelData.goal.x, gy = levelData.goal.y, gr = levelData.goal.r;
+    let pulse = Math.sin(Date.now() * 0.005) * 5;
+    
+    // Golden Glow
+    let grad = ctx.createRadialGradient(gx, gy, gr*0.5, gx, gy, gr*2);
+    grad.addColorStop(0, 'rgba(255, 215, 0, 0.8)');
+    grad.addColorStop(1, 'rgba(255, 215, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(gx, gy, gr*2, 0, Math.PI*2); ctx.fill();
+    
+    // Heart Shape
+    ctx.fillStyle = '#ffd700';
+    ctx.strokeStyle = '#ff6b81';
+    ctx.lineWidth = 2;
+    ctx.font = `${gr*1.5 + pulse}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText("♥", gx, gy + 5);
+    ctx.strokeText("♥", gx, gy + 5);
+
+    // Ropes (Chains)
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    // Check if we have chain data, else standard lines
+    if(chains && chains.length > 0) {
+        chains.forEach((chain, idx) => {
+            let p1 = players[idx];
+            let p2 = players[idx+1];
+            if(!p1 || !p2 || !p1.connected || !p2.connected) return;
+            
+            // Check tension (distance)
+            let dist = Math.sqrt((p1.x-p2.x)**2 + (p1.y-p2.y)**2);
+            if (dist > CONFIG.ROPE_LEN * 0.95) ctx.strokeStyle = '#ff4757'; // Red
+            else ctx.strokeStyle = '#dfe6e9'; // White
+            
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            chain.forEach(node => ctx.lineTo(node.x, node.y));
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        });
+    } else {
+        // Fallback for old clients or errors
+        ctx.strokeStyle = '#dfe6e9';
+        ctx.beginPath();
+        for(let i=0; i<players.length-1; i++) {
+            let p1 = players[i];
+            let p2 = players[i+1];
+            if(p1.connected && p2.connected) {
+                let midX = (p1.x + p2.x)/2;
+                let midY = (p1.y + p2.y)/2 + 20; 
+                ctx.moveTo(p1.x, p1.y);
+                ctx.quadraticCurveTo(midX, midY, p2.x, p2.y);
+            }
+        }
+        ctx.stroke();
+    }
+
+    // Players
+    players.forEach((p, i) => {
+        if(!p.connected) return;
+        
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        
+        let sx = p.scaleX || 1;
+        let sy = p.scaleY || 1;
+        ctx.scale(sx, sy);
+        
+        // Base Color
+        let baseColor = p.color;
+        if (p.expression === 'STRAIN') baseColor = '#e17055'; // Redder
+        if (p.dead) baseColor = '#636e72'; 
+
+        ctx.fillStyle = baseColor;
+        
+        // Ghost flicker
+        if (p.dead) {
+             ctx.globalAlpha = 0.5 + Math.sin(Date.now()*0.01)*0.2;
+        } else if (p.invincible) {
+             if (Math.floor(Date.now() / 100) % 2 === 0) ctx.globalAlpha = 0.3;
+        }
+        
+        // Hair (Behind)
+        if(p.hair && !p.dead) {
+            ctx.strokeStyle = baseColor;
+            ctx.lineWidth = 3;
+            // Since ctx is translated to p.x, p.y, we need relative coords for hair
+            // But hair is simulated in world space.
+            // Option: Draw hair before ctx.translate? Or Inverse translate?
+            // Easier: just draw hair relative.
+            // Actually, we computed hair in world space.
+            // Let's untranslate/unscale for hair drawing or adjust logic.
+            // Simplest: Draw hair first in world coords before save/translate for body.
+        }
+
+        // Body
+        // Jumping/Falling shape slightly differ?
+        // Jelly effect handled by scaleX/Y
+        ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill();
+        
+        // Blush
+        if (p.blush && !p.dead) {
+             ctx.fillStyle = '#ff7675';
+             ctx.beginPath(); ctx.arc(-7, 2, 3, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(7, 2, 3, 0, Math.PI*2); ctx.fill();
+        }
+
+        ctx.globalAlpha = 1;
+        
+        // Face Direction
+        let dir = p.faceDir || 1;
+        
+        // Eyes
+        ctx.fillStyle = '#fff';
+        let eyeOx = 4 * dir;
+        let eyeOy = -3;
+        
+        // Eye Shapes
+        ctx.save();
+        ctx.translate(eyeOx, eyeOy);
+        
+        // Calculate shapes
+        let eyeW = 4, eyeH = 4;
+        let pupilSize = 1.5;
+        
+        if (p.expression === 'JUMP') { eyeW=3; eyeH=5; } 
+        else if (p.expression === 'FALL') { eyeW=4; eyeH=4; } // Special draw
+
+        if (p.expression === 'STRAIN') {
+             // > <
+             ctx.strokeStyle = '#000';
+             ctx.lineWidth = 2;
+             ctx.beginPath();
+             // Left eye >
+             ctx.moveTo(-4, -2); ctx.lineTo(-1, 0); ctx.lineTo(-4, 2);
+             // Right eye <
+             ctx.moveTo(4, -2); ctx.lineTo(1, 0); ctx.lineTo(4, 2);
+             ctx.stroke();
+        } 
+        else if (p.expression === 'FALL' || p.expression === 'DEAD') {
+             // v v
+             ctx.strokeStyle = '#000';
+             ctx.lineWidth = 2;
+             ctx.beginPath();
+             // Left eye v
+             ctx.moveTo(-4, -2); ctx.lineTo(-2, 1); ctx.lineTo(0, -2);
+             // Right eye v
+             ctx.moveTo(2, -2); ctx.lineTo(4, 1); ctx.lineTo(6, -2);
+             ctx.stroke();
+        }
+        else {
+             // Normal Eyes (White Sclera)
+             ctx.beginPath(); ctx.arc(-3, 0, eyeW, 0, Math.PI*2); ctx.fill(); // Left
+             ctx.beginPath(); ctx.arc(3, 0, eyeW, 0, Math.PI*2); ctx.fill(); // Right
+             
+             // Pupils
+             ctx.fillStyle = '#000';
+             let px = (p.pupilX || 0); let py = (p.pupilY || 0);
+             ctx.beginPath(); ctx.arc(-3 + px, py, pupilSize, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(3 + px, py, pupilSize, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+
+        // Nose
+        ctx.fillStyle = (p.expression==='STRAIN') ? '#c0392b' : '#000'; // Dark nose
+        ctx.globalAlpha = 0.5; // faint nose
+        ctx.beginPath(); 
+        ctx.arc(6*dir, -1, 1.5, 0, Math.PI*2); 
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // Mouth
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        if (p.expression === 'JUMP') {
+             ctx.fillStyle = '#000';
+             ctx.arc(0, 5, 2, 0, Math.PI*2); ctx.fill(); // O shaped
+        } 
+        else if (p.expression === 'STRAIN') {
+             ctx.moveTo(-3, 6); ctx.lineTo(3, 6); ctx.stroke(); // Gritted
+        }
+        else if (p.expression === 'HAPPY') {
+             ctx.arc(0, 3, 5, 0.2, Math.PI-0.2); ctx.stroke(); // Big smile
+        }
+        else {
+             ctx.arc(0, 4, 3, 0.4, Math.PI-0.4); ctx.stroke(); // small smile
+        }
+
+        // "DEAD" label override
+        if(p.dead) {
+            ctx.scale(1/sx, 1/sy); 
+            ctx.fillStyle = '#fff';
+            // ctx.font = '10px Arial';
+            // ctx.fillText("X", 0, 5); // Removd X, use dead eyes
+        }
+        
+        ctx.restore();
+        
+        // Hair Draw (World Space)
+        if(p.hair && !p.dead) {
+            // Need to apply scaling manually? No hair is physically simulated so it's world coords
+            ctx.strokeStyle = baseColor;
+            ctx.lineWidth = 3;
+            // Cap
+            ctx.lineCap = 'round';
+            p.hair.forEach(strand => {
+                ctx.beginPath();
+                ctx.moveTo(strand[0].x, strand[0].y);
+                ctx.quadraticCurveTo(strand[1].x, strand[1].y, strand[2].x, strand[2].y);
+                ctx.stroke();
+            });
+        }
+        
+        // Indicator arrow for Me
+        if(i === myIdx) {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y - 25);
+            ctx.lineTo(p.x - 5, p.y - 35);
+            ctx.lineTo(p.x + 5, p.y - 35);
+            ctx.fill();
+        }
+    });
+
+    ctx.restore();
+}
+
+function gameLoop() {
+    if (currentState === STATE.PLAYING && gameRunning) {
+        if (isHost) updatePhysics();
+        else updateClient();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// --- CONTROLS ---
+
+function bindControls() {
+    const jumpBtn = document.getElementById('jump-btn');
+    const stickZone = document.getElementById('move-stick-zone');
+    const stick = document.getElementById('move-stick');
+    
+    // Jump
+    const setJump = (v) => localInput.jump = v;
+    jumpBtn.addEventListener('mousedown', () => setJump(true));
+    jumpBtn.addEventListener('mouseup', () => setJump(false));
+    jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setJump(true); });
+    jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); setJump(false); });
+
+    // Move Joystick
+    let drag = false;
+    const handleMove = (x, y, rect) => {
+        let cx = rect.left + rect.width/2;
+        let cy = rect.top + rect.height/2;
+        let dx = x - cx;
+        let dy = y - cy;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        let max = 35;
+        
+        // Deadzone (20%)
+        if (dist < max * 0.2) {
+            stick.style.transform = `translate(-50%, -50%)`;
+            localInput.x = 0;
+            return;
+        }
+
+        if (dist > max) { dx = (dx/dist)*max; dy=(dy/dist)*max; }
+        stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        localInput.x = dx / max;
+        localInput.y = dy / max;
+    }
+    
+    const startObj = (e) => { drag = true; handleMove(e.clientX || e.touches[0].clientX, e.clientY || e.touches[0].clientY, stickZone.getBoundingClientRect()); };
+    const moveObj = (e) => { if (drag) { e.preventDefault(); handleMove(e.clientX || e.touches[0].clientX, e.clientY || e.touches[0].clientY, stickZone.getBoundingClientRect()); }};
+    const endObj = () => { drag = false; localInput.x = 0; localInput.y = 0; stick.style.transform = `translate(-50%, -50%)`; };
+    
+    stickZone.addEventListener('mousedown', startObj);
+    document.addEventListener('mousemove', moveObj);
+    document.addEventListener('mouseup', endObj);
+    stickZone.addEventListener('touchstart', startObj, {passive:false});
+    stickZone.addEventListener('touchmove', moveObj, {passive:false});
+    stickZone.addEventListener('touchend', endObj);
+}
+bindControls();
+
+// --- UI HELPERS ---
+const canvas = document.getElementById('gameCanvas');
+const resize = () => { 
+    scale = window.innerHeight / 768; // Or use container height?
+    
+    // Canvas matches window physical pixels (for now)
+    canvas.width = window.innerWidth; 
+    canvas.height = window.innerHeight; 
+    
+};
+window.addEventListener('resize', resize);
+resize();
+
+function uiSet(s) {
+    currentState = s;
+    document.querySelectorAll('.screen').forEach(e => e.classList.remove('visible'));
+    
+    if (s === STATE.MENU) {
+        document.getElementById('menu-screen').classList.add('visible');
+    }
+    
+    if (s === STATE.LOBBY) {
+        document.getElementById('waiting-room').classList.add('visible');
+        updatePlayerListUI();
+        
+        // Host/Guest UI Logic
+        if (isHost) {
+            document.getElementById('host-controls').style.display = 'block';
+            document.getElementById('guest-controls').style.display = 'none';
+            document.querySelector('#connection-status span').innerText = "Hosting";
+            document.querySelector('#connection-status span').style.color = "#2ed573";
+        } else {
+            document.getElementById('host-controls').style.display = 'none';
+            document.getElementById('guest-controls').style.display = 'block';
+            document.querySelector('#connection-status span').innerText = "Connected";
+            document.querySelector('#connection-status span').style.color = "#2ed573";
+        }
+    }
+    
+    if (s === STATE.GAMEOVER) {
+        // Now handled by showOverlay, but fallback
+        document.getElementById('overlay-screen').classList.add('visible');
+    }
+    
+    document.getElementById('controls').style.display = (s === STATE.PLAYING) ? 'flex' : 'none';
+}
+
+function updatePlayerListUI() {
+    const list = document.getElementById('player-list');
+    list.innerHTML = '';
+    players.forEach((p, i) => {
+        if(p.connected) {
+            const div = document.createElement('div');
+            div.style.color = p.color;
+            div.style.marginBottom = '5px';
+            div.innerText = `Player ${i+1}: Ready`;
+            list.appendChild(div);
+        }
+    });
+}
+
+
+function showOverlay(title, msg, canRestart) {
+    currentState = STATE.GAMEOVER; // Pause Logic
+    uiSet(STATE.GAMEOVER); // Show screen
+    AudioSys.stopBGM();
+
+    document.getElementById('overlay-title').innerText = title;
+    document.getElementById('overlay-msg').innerText = msg;
+    
+    const btnContainer = document.getElementById('overlay-btn-container');
+    if (canRestart && isHost) {
+        btnContainer.style.display = 'block';
+    } else {
+        btnContainer.style.display = 'none';
+    }
+}
+
+function showWinScreen(stats) {
+    currentState = STATE.GAMEOVER;
+    uiSet(STATE.GAMEOVER); // This hides everything first
+    document.getElementById('overlay-screen').classList.remove('visible'); // Fix: Hide default overlay
+    
+    // Explicitly show Win Screen
+    const screen = document.getElementById('win-screen');
+    screen.classList.add('visible');
+    
+    document.getElementById('win-time').innerText = stats.time + "s";
+    document.getElementById('win-deaths').innerText = stats.deaths;
+    
+    if (isHost) {
+        document.getElementById('win-host-controls').style.display = 'block';
+        document.getElementById('win-guest-wait').style.display = 'none';
+    } else {
+        document.getElementById('win-host-controls').style.display = 'none';
+        document.getElementById('win-guest-wait').style.display = 'block';
+    }
+}
+
+
+
+</script>
+</body>
+</html>
