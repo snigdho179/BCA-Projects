@@ -1,7 +1,10 @@
+import os
+import sys
 import cv2
 
 class MovementDetector:
-    def __init__(self, video, sensitivity=30, min_area=1000):
+    def __init__(self, video, sensitivity=30, min_area=15000):
+
         """Initialize the detector with video source and settings."""
         self.cap = cv2.VideoCapture(video)
         self.sensitivity = sensitivity
@@ -21,14 +24,20 @@ class MovementDetector:
     def detect(self, frame):
         """Returns True if movement is detected in the current frame."""
         current_gray = self.preprocess(frame)
-        
+
+        # If background not initialized yet, set it from this frame
+        if self.background_frame is None:
+            self.background_frame = current_gray
+            return False, None
+
         # Calculate difference
         diff = cv2.absdiff(self.background_frame, current_gray)
         thresh = cv2.threshold(diff, self.sensitivity, 255, cv2.THRESH_BINARY)[1]
         thresh = cv2.dilate(thresh, None, iterations=2)
         
-        # Find contours
-        contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Find contours (compatible with different OpenCV signatures)
+        contours_info = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = contours_info[0] if len(contours_info) == 2 else contours_info[1]
         
         movement_found = False
         for contour in contours:
@@ -38,11 +47,27 @@ class MovementDetector:
                 
         return movement_found, thresh
 
+
+
 # --- Main Program Execution ---
 
 # input file name from user
-file_name = input("Enter the video file name (e.g., 'video.mp4'): ")
+file_name = input("Enter the video file name (e.g., 'video.mp4'): ").strip()
+# file_name = "123.mp4" 
+
+# If the user gave a bare filename, try resolving it relative to this script's directory
+if file_name and not os.path.isabs(file_name) and not os.path.exists(file_name):
+    candidate = os.path.join(os.path.dirname(__file__), file_name)
+    if os.path.exists(candidate):
+        file_name = candidate
+
 detector = MovementDetector(file_name)
+
+# DEBUG CHECK: Did the video actually open?
+if not detector.cap.isOpened():
+    print("ERROR: Could not open video file. Check the path or file name!")
+else:
+    print("Video opened successfully. Starting movement detection...")
 
 while True:
     ret, frame = detector.cap.read()
