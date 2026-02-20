@@ -13,7 +13,7 @@ void bubbleSort(int *arr, int n) {
     for (i = 0; i < n - 1; i++) {
         // Pointer 'ptr' points to the start of the array
         // We stop at (arr + n - 1 - i) because the last 'i' elements are already sorted
-        for (ptr = arr; ptr < arr + n - 1 - i; ptr++) {
+        for (ptr = arr; ptr < arr + n; ptr++) {
             
             // Compare value at ptr with value at next address (ptr+1)
             if (*ptr > *(ptr + 1)) {

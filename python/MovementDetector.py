@@ -1,9 +1,9 @@
 import cv2
 
 class MovementDetector:
-    def __init__(self, video_source, sensitivity=30, min_area=1000):
+    def __init__(self, video, sensitivity=30, min_area=1000):
         """Initialize the detector with video source and settings."""
-        self.cap = cv2.VideoCapture(video_source)
+        self.cap = cv2.VideoCapture(video)
         self.sensitivity = sensitivity
         self.min_area = min_area
         self.background_frame = None
@@ -11,16 +11,16 @@ class MovementDetector:
         # Grab the first frame to set as background
         ret, frame = self.cap.read()
         if ret:
-            self.background_frame = self._preprocess(frame)
+            self.background_frame = self.preprocess(frame)
 
-    def _preprocess(self, frame):
+    def preprocess(self, frame):
         """Internal method to convert frame to gray and blur it."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         return cv2.GaussianBlur(gray, (21, 21), 0)
 
     def detect(self, frame):
         """Returns True if movement is detected in the current frame."""
-        current_gray = self._preprocess(frame)
+        current_gray = self.preprocess(frame)
         
         # Calculate difference
         diff = cv2.absdiff(self.background_frame, current_gray)
@@ -39,7 +39,10 @@ class MovementDetector:
         return movement_found, thresh
 
 # --- Main Program Execution ---
-detector = MovementDetector("glass_video.mp4")
+
+# input file name from user
+file_name = input("Enter the video file name (e.g., 'video.mp4'): ")
+detector = MovementDetector(file_name)
 
 while True:
     ret, frame = detector.cap.read()
