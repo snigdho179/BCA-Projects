@@ -69,6 +69,8 @@ if not detector.cap.isOpened():
 else:
     print("Video opened successfully. Starting movement detection...")
 
+
+# Main loop to read frames and detect movement
 while True:
     ret, frame = detector.cap.read()
     if not ret:
