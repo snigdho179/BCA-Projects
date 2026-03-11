@@ -13,7 +13,7 @@ class MovementDetector:
         
         # Grab the first frame to set as background
         ret, frame = self.cap.read()
-        if ret:
+        if ret == True:
             self.background_frame = self.preprocess(frame)
 
     def preprocess(self, frame):
@@ -35,9 +35,13 @@ class MovementDetector:
         thresh = cv2.threshold(diff, self.sensitivity, 255, cv2.THRESH_BINARY)[1]
         thresh = cv2.dilate(thresh, None, iterations=2)
         
-        # Find contours (compatible with different OpenCV signatures)
+        # Find Motions (compatible with different OpenCV versions)
         contours_info = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        contours = contours_info[0] if len(contours_info) == 2 else contours_info[1]
+       
+        if len(contours_info) == 2:
+            contours = contours_info[0]
+        else:
+            contours = contours_info[1]
         
         movement_found = False
         for contour in contours:
@@ -78,7 +82,7 @@ while True:
 
     is_moving, debug_view = detector.detect(frame)
 
-    if is_moving:
+    if is_moving == True:
         cv2.putText(frame, "MOVEMENT DETECTED", (20, 50), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
